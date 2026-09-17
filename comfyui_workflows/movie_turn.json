@@ -94,10 +94,7 @@
   },
   "89": {
     "inputs": {
-      "text": [
-        "125",
-        0
-      ],
+      "text": "walking, jumping, drifting,\ncamera pan, camera zoom, camera shake,\nsudden rotation, fast spin,\nbody distortion, twisted neck, broken shoulders,\nextra arms, extra hands, duplicated face,\nbackground warping, flickering\n, multiple_views,, text,signature, bad hands,extra digit, worst quality, low quality,bad anatomy",
       "clip": [
         "84",
         0
@@ -119,10 +116,7 @@
   },
   "93": {
     "inputs": {
-      "text": [
-        "124",
-        0
-      ],
+      "text": "a girl turns and spins in place,, \n, masterpiece,amazing quality,best quality,detailed hair,detailed eyes",
       "clip": [
         "84",
         0
@@ -171,7 +165,7 @@
   },
   "97": {
     "inputs": {
-      "image": "stand01 (4).png"
+      "image": "input.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -274,64 +268,6 @@
     "class_type": "SaveVideo",
     "_meta": {
       "title": "ビデオを保存"
-    }
-  },
-  "124": {
-    "inputs": {
-      "text_1": "a girl turns and spins in place,",
-      "weight_1": 1,
-      "text_2": "",
-      "weight_2": 1,
-      "text_3": "",
-      "weight_3": 1,
-      "text_4": "",
-      "weight_4": 1,
-      "text_5": "",
-      "weight_5": 1,
-      "text_6": "",
-      "weight_6": 1,
-      "text_7": "\n",
-      "weight_7": 1,
-      "text_8": "",
-      "weight_8": 1,
-      "text_9": "",
-      "weight_9": 0.4,
-      "text_10": "masterpiece,amazing quality,best quality,detailed hair,detailed eyes",
-      "weight_10": 1,
-      "active": true
-    },
-    "class_type": "promptComposerTextMultiple",
-    "_meta": {
-      "title": "Prompt Composer Multiple Text"
-    }
-  },
-  "125": {
-    "inputs": {
-      "text_1": "walking, jumping, drifting,\ncamera pan, camera zoom, camera shake,\nsudden rotation, fast spin,\nbody distortion, twisted neck, broken shoulders,\nextra arms, extra hands, duplicated face,\nbackground warping, flickering\n",
-      "weight_1": 1,
-      "text_2": "multiple_views,",
-      "weight_2": 1,
-      "text_3": "text,signature",
-      "weight_3": 1,
-      "text_4": "",
-      "weight_4": 1,
-      "text_5": "",
-      "weight_5": 1,
-      "text_6": "",
-      "weight_6": 1,
-      "text_7": "",
-      "weight_7": 1.95,
-      "text_8": "",
-      "weight_8": 1,
-      "text_9": "bad hands,extra digit",
-      "weight_9": 1,
-      "text_10": "worst quality, low quality,bad anatomy",
-      "weight_10": 1,
-      "active": true
-    },
-    "class_type": "promptComposerTextMultiple",
-    "_meta": {
-      "title": "Negative"
     }
   }
 }

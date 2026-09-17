@@ -1,14 +1,11 @@
 {
   "1": {
     "inputs": {
-      "directory": "C:\\Users\\nin65\\Desktop\\stabledifusion\\albums\\260816 探春\\lora source\\10_face",
-      "image_load_cap": 0,
-      "skip_first_images": 0,
-      "select_every_nth": 1
+      "image": "input.png"
     },
-    "class_type": "VHS_LoadImagesPath",
+    "class_type": "LoadImage",
     "_meta": {
-      "title": "Load Images (Path) 🎥🅥🅗🅢"
+      "title": "画像を読み込む"
     }
   },
   "5": {
