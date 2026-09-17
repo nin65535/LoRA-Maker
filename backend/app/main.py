@@ -1,0 +1,32 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.app.api.health import router as health_router
+from backend.app.core.errors import register_exception_handlers
+from backend.app.core.logging import configure_logging, register_request_logging
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="LoRA Maker API", version="0.1.0")
+    logger = configure_logging()
+    app.state.logger = logger
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    register_request_logging(app, logger)
+    register_exception_handlers(app)
+    app.include_router(health_router, prefix="/api")
+
+    @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+    async def api_not_found(path: str) -> None:
+        raise HTTPException(status_code=404, detail=f"API route not found: /api/{path}")
+
+    return app
+
+
+app = create_app()

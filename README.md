@@ -5,7 +5,7 @@ LoRA制作で繰り返し発生するファイル操作や外部ツールの実�
 ComfyUI、BandiView、ffmpeg、sd-scriptsを置き換えるものではありません。各ツールとプロジェクトデータをつなぎ、動画生成からフレーム抽出、画像選別・拡大、タグ付け、LoRA学習までの流れを管理する「司令塔」を目指しています。
 
 > [!IMPORTANT]
-> 現在はフェーズ0（外部連携・実行環境の事前検証）まで完了した開発初期段階です。アプリ本体のUIやAPIはまだ実装されていません。
+> 現在はフェーズ1（開発基盤）まで完了しています。FastAPIとReact/Viteを個別に起動し、疎通確認できます。
 
 ## 目指すワークフロー
 
@@ -27,10 +27,14 @@ ComfyUI、BandiView、ffmpeg、sd-scriptsを置き換えるものではありま
   - BandiViewによる元画像を保持した選別を確認
   - Stability Matrix管理下のsd-scriptsで最小学習を確認
   - ComfyUIと学習処理のGPU排他方針を確認
-- フェーズ1：未着手
-  - FastAPI + React/TypeScriptの開発基盤を構築予定
+- フェーズ1：完了
+  - FastAPI + React/TypeScriptの開発基盤を構築
+  - ヘルスチェックAPI、疎通画面、共通エラー応答、リクエストログを実装
+  - バックエンド自動テスト、TypeScript型検査、Vite本番ビルドを確認
+- フェーズ2：未着手
+  - 設定・プロジェクト・データセット管理を実装予定
 
-全体の進捗は[実装ロードマップ](documents/企画書/06_実装ロードマップ.md)、実測結果は[フェーズ0事前検証記録](documents/実装ログ/2026-09-18_フェーズ0事前検証記録.md)を参照してください。
+全体の進捗は[実装ロードマップ](documents/企画書/06_実装ロードマップ.md)、実測結果は[フェーズ0事前検証記録](documents/実装ログ/2026-09-18_フェーズ0事前検証記録.md)と[フェーズ1開発基盤実装記録](documents/実装ログ/2026-09-18_フェーズ1開発基盤実装記録.md)を参照してください。
 
 ## 想定構成
 
@@ -97,9 +101,44 @@ py -3.14 -m venv .venv
 | `documents/` | 仕様、設計、ロードマップ、実装ログ |
 | `comfyui_workflows/` | 実機検証済みのComfyUI APIワークフロー |
 | `scripts/` | 環境確認用スクリプト |
+| `backend/` | FastAPIバックエンド |
+| `frontend/` | Vite + React/TypeScriptフロントエンド |
+| `tests/` | バックエンド自動テスト |
 | `phase0/` | フェーズ0の検証用設定 |
 
 `phase0-output/`と`workspace/`はローカルでの検証・作業用であり、Git管理の対象外です。
+
+## 開発サーバーを起動する
+
+初回は固定された依存関係を導入します。
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+Set-Location frontend
+npm ci
+Set-Location ..
+```
+
+別々のPowerShellでバックエンドとフロントエンドを起動します。
+
+```powershell
+.\scripts\dev-backend.ps1
+```
+
+```powershell
+.\scripts\dev-frontend.ps1
+```
+
+ブラウザで`http://127.0.0.1:5173`を開くと、FastAPIへの接続状態が表示されます。
+
+自動テストとフロントエンド検証は次のコマンドで実行できます。
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+Set-Location frontend
+npm run test
+npm run build
+```
 
 ## ドキュメント
 

@@ -1,4 +1,8 @@
 *.code-workspace
+__pycache__/
+*.py[cod]
 .venv/
 phase0-output/
 workspace/
+frontend/node_modules/
+frontend/dist/
