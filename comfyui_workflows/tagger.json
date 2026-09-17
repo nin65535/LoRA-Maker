@@ -1,0 +1,46 @@
+{
+  "1": {
+    "inputs": {
+      "directory": "C:\\Users\\nin65\\Desktop\\stabledifusion\\albums\\260816 探春\\lora source\\10_face",
+      "image_load_cap": 0,
+      "skip_first_images": 0,
+      "select_every_nth": 1
+    },
+    "class_type": "VHS_LoadImagesPath",
+    "_meta": {
+      "title": "Load Images (Path) 🎥🅥🅗🅢"
+    }
+  },
+  "5": {
+    "inputs": {
+      "model": "wd-eva02-large-tagger-v3",
+      "threshold": 0.35,
+      "character_threshold": 0.85,
+      "replace_underscore": false,
+      "trailing_comma": false,
+      "exclude_tags": "",
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "WD14Tagger|pysssss",
+    "_meta": {
+      "title": "WD14 Tagger 🐍"
+    }
+  },
+  "18": {
+    "inputs": {
+      "filename_prefix": "sample",
+      "format": "txt",
+      "text": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "SaveText",
+    "_meta": {
+      "title": "テキストを保存"
+    }
+  }
+}

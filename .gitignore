@@ -1,1 +1,4 @@
 *.code-workspace
+.venv/
+phase0-output/
+workspace/
