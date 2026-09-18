@@ -1,7 +1,11 @@
 from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.health import router as health_router
 from backend.app.api.jobs import router as jobs_router
@@ -21,9 +25,16 @@ from backend.app.services.upscale_service import UpscaleService
 from backend.app.services.movie_service import MovieService
 from backend.app.services.training_service import TrainingService
 from backend.app.api.training import router as training_router
+from backend.app.services.shutdown_service import ShutdownService
 
 
-def create_app(project_service: ProjectService | None = None, job_service: JobService | None = None) -> FastAPI:
+def create_app(
+    project_service: ProjectService | None = None,
+    job_service: JobService | None = None,
+    request_shutdown: Callable[[], None | Awaitable[None]] | None = None,
+    shutdown_grace_seconds: float = 10.0,
+    frontend_dist: Path | None = None,
+) -> FastAPI:
     active_project_service = project_service or ProjectService()
     active_job_service = job_service or JobService(active_project_service.settings_directory / "jobs.sqlite3")
     active_tag_service = TagService(active_project_service)
@@ -36,14 +47,23 @@ def create_app(project_service: ProjectService | None = None, job_service: JobSe
     active_job_service.register_handler("image-upscale", active_upscale_service.run)
     active_job_service.register_handler("movie-generation", active_movie_service.run)
     active_job_service.register_handler("lora-training", active_training_service.run)
+    shutdown_service = (
+        ShutdownService(active_job_service, request_shutdown, shutdown_grace_seconds)
+        if request_shutdown is not None
+        else None
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         active_project_service.restore_last_project()
         await active_job_service.start()
+        if shutdown_service is not None:
+            await shutdown_service.start()
         try:
             yield
         finally:
+            if shutdown_service is not None:
+                await shutdown_service.stop()
             await active_job_service.stop()
 
     app = FastAPI(title="LoRA Maker API", version="0.9.0", lifespan=lifespan)
@@ -56,6 +76,7 @@ def create_app(project_service: ProjectService | None = None, job_service: JobSe
     app.state.upscale_service = active_upscale_service
     app.state.movie_service = active_movie_service
     app.state.training_service = active_training_service
+    app.state.shutdown_service = shutdown_service
 
     app.add_middleware(
         CORSMiddleware,
@@ -79,6 +100,19 @@ def create_app(project_service: ProjectService | None = None, job_service: JobSe
     @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def api_not_found(path: str) -> None:
         raise HTTPException(status_code=404, detail=f"API route not found: /api/{path}")
+
+    resolved_dist = frontend_dist or Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    if resolved_dist.is_dir() and (resolved_dist / "index.html").is_file():
+        assets = resolved_dist / "assets"
+        if assets.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+        @app.get("/{path:path}", include_in_schema=False)
+        async def spa(path: str) -> FileResponse:
+            candidate = (resolved_dist / path).resolve()
+            if candidate.is_relative_to(resolved_dist.resolve()) and candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(resolved_dist / "index.html")
 
     return app
 

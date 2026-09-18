@@ -45,10 +45,16 @@ def cancel_job(job_id: str, request: Request) -> Job:
 @router.get("/events/stream")
 async def job_events(request: Request) -> StreamingResponse:
     async def stream():
-        async for event in service(request).events():
-            if await request.is_disconnected():
-                break
-            yield f"event: {event}\ndata: {json.dumps({'event': event})}\n\n"
+        shutdown_service = getattr(request.app.state, "shutdown_service", None)
+        if shutdown_service is not None:
+            await shutdown_service.connected()
+        try:
+            async for event in service(request).events():
+                if await request.is_disconnected():
+                    break
+                yield f"event: {event}\ndata: {json.dumps({'event': event})}\n\n"
+        finally:
+            if shutdown_service is not None:
+                await shutdown_service.disconnected()
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
-
