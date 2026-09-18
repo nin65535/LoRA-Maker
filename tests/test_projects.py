@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from backend.app.main import create_app
-from backend.app.services.project_service import FOLDERS, ProjectService
+from backend.app.services.project_service import ProjectService
 
 
 class ProjectApiTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class ProjectApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue((root / "lora_maker.json").is_file())
-        for _, folder_name in FOLDERS:
+        for _, folder_name in self.service.master_service.folders:
             self.assertTrue((root / folder_name).is_dir())
 
         response = self.client.post(

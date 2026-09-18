@@ -3,7 +3,7 @@ import json
 import sqlite3
 import threading
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +27,14 @@ class JobService:
         self._worker: asyncio.Task[None] | None = None
         self._stopping = False
         self._initialized = False
+        self._handlers: dict[str, Callable[[dict[str, Any], Callable[[str], None]], Awaitable[None]]] = {}
+
+    def register_handler(
+        self,
+        job_type: str,
+        handler: Callable[[dict[str, Any], Callable[[str], None]], Awaitable[None]],
+    ) -> None:
+        self._handlers[job_type] = handler
 
     @contextmanager
     def _connect(self):
@@ -200,16 +208,31 @@ class JobService:
 
     async def _execute(self, job: Job) -> None:
         try:
-            if job.type != "test":
+            if job.type == "test":
+                await asyncio.sleep(float(job.payload["durationSeconds"]))
+                if job.payload.get("shouldFail"):
+                    raise RuntimeError("テスト用の失敗です")
+            elif handler := self._handlers.get(job.type):
+                await handler(job.payload, lambda message: self._append_log(job.id, message))
+            else:
                 raise RuntimeError(f"未対応のジョブ種別です: {job.type}")
-            await asyncio.sleep(float(job.payload["durationSeconds"]))
-            if job.payload.get("shouldFail"):
-                raise RuntimeError("テスト用の失敗です")
             self._finish(job.id, JobStatus.COMPLETED, "正常に完了しました", None)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             self._finish(job.id, JobStatus.FAILED, "失敗しました", str(exc))
+
+    def _append_log(self, job_id: str, message: str) -> None:
+        now = self._now()
+        with self._lock, self._connect() as connection:
+            row = connection.execute("SELECT logs FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            logs = json.loads(row["logs"])
+            logs.append(f"{now} {message}")
+            connection.execute(
+                "UPDATE jobs SET logs = ? WHERE id = ?",
+                (json.dumps(logs, ensure_ascii=False), job_id),
+            )
+        self._publish("jobs-changed")
 
     def _finish(self, job_id: str, status: JobStatus, message: str, error: str | None) -> None:
         now = self._now()

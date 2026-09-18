@@ -14,17 +14,7 @@ from backend.app.schemas.projects import (
     ProjectState,
 )
 from backend.app.services.native_dialog import select_project_config
-
-
-FOLDERS = (
-    ("sourceImages", "01_素材画像"),
-    ("videos", "02_動画"),
-    ("capturedFrames", "03_動画キャプチャ"),
-    ("upscaledImages", "04_拡大"),
-    ("generatedTags", "05_タグ付け"),
-    ("trainingDataset", "06_LoRA学習素材"),
-    ("trainedLora", "07_LoRA"),
-)
+from backend.app.services.master_service import MasterService
 
 
 class ProjectServiceError(ValueError):
@@ -53,6 +43,7 @@ class ProjectService:
         self,
         settings_directory: Path | None = None,
         file_selector: Callable[[Path | None], Path | None] = select_project_config,
+        master_service: MasterService | None = None,
     ) -> None:
         configured = os.environ.get("LORA_MAKER_SETTINGS_DIR")
         default = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "LoRAMaker"
@@ -64,10 +55,11 @@ class ProjectService:
             self.settings_directory = default
         self.settings_path = self.settings_directory / "settings.json"
         self.file_selector = file_selector
+        self.master_service = master_service or MasterService()
         self.current: ProjectState | None = None
 
     def master(self) -> dict[str, Any]:
-        return {"folders": [{"key": key, "name": name} for key, name in FOLDERS]}
+        return self.master_service.value.model_dump(by_alias=True)
 
     def settings(self) -> PersonalSettings:
         if not self.settings_path.exists():
@@ -101,7 +93,7 @@ class ProjectService:
         if config_path.exists():
             raise ProjectServiceError("lora_maker.json は既に存在します")
         root.mkdir(parents=True, exist_ok=True)
-        for _, folder_name in FOLDERS:
+        for _, folder_name in self.master_service.folders:
             (root / folder_name).mkdir(exist_ok=True)
         for dataset in config.datasets:
             self._create_dataset_folders(root, dataset)
@@ -163,20 +155,24 @@ class ProjectService:
         return state
 
     def _create_dataset_folders(self, root: Path, dataset: DatasetConfig) -> None:
-        for _, folder_name in FOLDERS[:5]:
+        folders = self.master_service.folder_map
+        for key in ("sourceImages", "videos", "capturedFrames", "upscaledImages", "generatedTags"):
+            folder_name = folders[key]
             (root / folder_name / dataset.key).mkdir(parents=True, exist_ok=True)
-        (root / FOLDERS[5][1] / f"{dataset.repeats}_{dataset.key}").mkdir(parents=True, exist_ok=True)
+        (root / folders["trainingDataset"] / f"{dataset.repeats}_{dataset.key}").mkdir(parents=True, exist_ok=True)
 
     def _warnings(self, root: Path, config: ProjectConfig) -> list[str]:
         warnings: list[str] = []
-        for _, folder_name in FOLDERS:
+        folders = self.master_service.folder_map
+        for _, folder_name in self.master_service.folders:
             if not (root / folder_name).is_dir():
                 warnings.append(f"工程フォルダがありません: {folder_name}")
         for dataset in config.datasets:
-            for _, folder_name in FOLDERS[:5]:
+            for key in ("sourceImages", "videos", "capturedFrames", "upscaledImages", "generatedTags"):
+                folder_name = folders[key]
                 if not (root / folder_name / dataset.key).is_dir():
                     warnings.append(f"データセットフォルダがありません: {folder_name}/{dataset.key}")
-            expected = root / FOLDERS[5][1] / f"{dataset.repeats}_{dataset.key}"
+            expected = root / folders["trainingDataset"] / f"{dataset.repeats}_{dataset.key}"
             if not expected.is_dir():
                 warnings.append(f"学習素材フォルダが設定と一致しません: {expected.name}")
         return warnings

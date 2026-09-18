@@ -16,7 +16,7 @@ async def progress(request: Request) -> ProjectProgress:
     current = request.app.state.project_service.current
     if current is None:
         raise HTTPException(status_code=409, detail="プロジェクトが開かれていません")
-    return await asyncio.to_thread(scan_project, current)
+    return await asyncio.to_thread(scan_project, current, request.app.state.project_service.master_service.value)
 
 
 def _comfyui_status(url: str) -> tuple[str, str]:

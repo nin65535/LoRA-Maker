@@ -8,12 +8,7 @@ from backend.app.schemas.progress import (
     ProjectProgress,
 )
 from backend.app.schemas.projects import ProjectState
-from backend.app.services.project_service import FOLDERS
-
-
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
-VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
-LORA_EXTENSIONS = {".safetensors", ".ckpt", ".pt"}
+from backend.app.schemas.master import AppMaster
 LIST_LIMIT = 200
 
 
@@ -33,24 +28,27 @@ def _group(path: Path, extensions: set[str], recursive: bool = True) -> tuple[Fi
     return FileGroup(count=len(found), files=names, truncated=len(found) > LIST_LIMIT), found
 
 
-def scan_project(state: ProjectState) -> ProjectProgress:
+def scan_project(state: ProjectState, master: AppMaster) -> ProjectProgress:
     root = Path(state.root_path)
-    folder = {key: root / name for key, name in FOLDERS}
+    folder = {item.key: root / item.name for item in master.folders}
+    image_extensions = set(master.file_extensions.images)
+    video_extensions = set(master.file_extensions.videos)
+    lora_extensions = set(master.file_extensions.lora)
     datasets: list[DatasetProgress] = []
     warnings = list(state.warnings)
 
     for config in state.config.datasets:
-        source_group, _ = _group(folder["sourceImages"] / config.key, IMAGE_EXTENSIONS)
-        video_group, _ = _group(folder["videos"] / config.key, VIDEO_EXTENSIONS)
+        source_group, _ = _group(folder["sourceImages"] / config.key, image_extensions)
+        video_group, _ = _group(folder["videos"] / config.key, video_extensions)
         capture_path = folder["capturedFrames"] / config.key
-        capture_group, _ = _group(capture_path, IMAGE_EXTENSIONS)
+        capture_group, _ = _group(capture_path, image_extensions)
         capture_directories = [item for item in capture_path.iterdir() if item.is_dir()] if capture_path.is_dir() else []
         capture_folders = len(capture_directories)
-        empty_capture_folders = sum(1 for item in capture_directories if not _files(item, IMAGE_EXTENSIONS))
-        upscale_group, _ = _group(folder["upscaledImages"] / config.key, IMAGE_EXTENSIONS)
+        empty_capture_folders = sum(1 for item in capture_directories if not _files(item, image_extensions))
+        upscale_group, _ = _group(folder["upscaledImages"] / config.key, image_extensions)
         raw_group, _ = _group(folder["generatedTags"] / config.key, {".txt"})
         training_path = folder["trainingDataset"] / f"{config.repeats}_{config.key}"
-        training_images, image_files = _group(training_path, IMAGE_EXTENSIONS)
+        training_images, image_files = _group(training_path, image_extensions)
         training_captions, caption_files = _group(training_path, {".txt"})
         image_stems = {item.relative_to(training_path).with_suffix("").as_posix().lower() for item in image_files}
         caption_stems = {item.relative_to(training_path).with_suffix("").as_posix().lower() for item in caption_files}
@@ -77,7 +75,7 @@ def scan_project(state: ProjectState) -> ProjectProgress:
         ))
         warnings.extend(f"{config.name}: {message}" for message in item_warnings)
 
-    lora_group, _ = _group(folder["trainedLora"], LORA_EXTENSIONS)
+    lora_group, _ = _group(folder["trainedLora"], lora_extensions)
     def total(attribute: str) -> int:
         return sum(getattr(item, attribute).count for item in datasets)
     totals = ProgressTotals(
