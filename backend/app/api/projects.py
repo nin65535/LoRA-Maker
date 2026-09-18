@@ -27,6 +27,11 @@ def run(action):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def ensure_switch_allowed(request: Request) -> None:
+    if request.app.state.job_service.has_active():
+        raise HTTPException(status_code=409, detail="待機中または実行中のジョブがあるためプロジェクトを切り替えられません")
+
+
 @router.get("/current", response_model=ProjectState | None)
 def current(request: Request) -> ProjectState | None:
     return service(request).current
@@ -34,17 +39,20 @@ def current(request: Request) -> ProjectState | None:
 
 @router.post("/create", response_model=ProjectState)
 def create(payload: ProjectCreateRequest, request: Request) -> ProjectState:
+    ensure_switch_allowed(request)
     config = ProjectConfig(project={"name": payload.name}, datasets=payload.datasets)
     return run(lambda: service(request).create(Path(payload.root_path), config))
 
 
 @router.post("/load", response_model=ProjectState)
 def load(payload: ProjectLoadRequest, request: Request) -> ProjectState:
+    ensure_switch_allowed(request)
     return run(lambda: service(request).load(Path(payload.config_path)))
 
 
 @router.post("/select", response_model=ProjectState | None)
 def select_project(request: Request) -> ProjectState | None:
+    ensure_switch_allowed(request)
     return run(lambda: service(request).select_and_load())
 
 
