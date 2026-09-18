@@ -44,6 +44,7 @@
       "negativePrompt": { "nodeId": "125", "inputName": "text" },
       "output": { "nodeId": "108", "inputName": null }
     },
+    "timeoutSeconds": 3600,
     "presets": [
       { "key": "jump", "name": "ジャンプ", "positivePrompt": "a girl jumps in place,looking forward,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "walking, drifting,camera pan, camera zoom, camera shake,sudden rotation, fast spin,body distortion, twisted neck, broken shoulders,extra arms, extra hands, duplicated face,background warping, flickering,multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" },
       { "key": "camera_pan", "name": "カメラパン", "positivePrompt": "A single character standing still, full body visible, facing forward, neutral pose. The camera starts at eye level, front view, centered composition. The camera slowly moves upward and backward, smoothly rising above the character. The viewpoint gradually changes to a high-angle shot, looking down diagonally from above. The character remains perfectly still and unchanged. No change in facial expression, clothing, or body proportions. Smooth cinematic camera movement, slow camera crane up, no camera shake. Consistent lighting, consistent background, stable framing,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" },

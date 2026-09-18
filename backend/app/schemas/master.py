@@ -66,6 +66,7 @@ class MovieGenerationMaster(BaseModel):
     workflow_path: str = Field(alias="workflowPath", min_length=1)
     nodes: dict[str, WorkflowNode]
     presets: list[MoviePreset]
+    timeout_seconds: int = Field(default=3600, alias="timeoutSeconds", ge=1)
 
 
 class AppMaster(BaseModel):

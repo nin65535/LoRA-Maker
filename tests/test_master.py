@@ -31,6 +31,18 @@ class MasterServiceTests(unittest.TestCase):
         with self.assertRaises(MasterServiceError):
             MasterService(self.path)
 
+    def test_movie_presets_can_be_added_and_removed_without_fixed_keys(self) -> None:
+        value = json.loads(self.path.read_text(encoding="utf-8"))
+        value["movieGeneration"]["presets"] = [
+            {"key": "custom_motion", "name": "独自動作", "positivePrompt": "move", "negativePrompt": "stop"},
+            {"key": "second", "name": "別動作", "positivePrompt": "second", "negativePrompt": ""},
+        ]
+        self.path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+
+        presets = MasterService(self.path).value.movie_generation.presets
+
+        self.assertEqual([item.key for item in presets], ["custom_motion", "second"])
+
 
 if __name__ == "__main__":
     unittest.main()

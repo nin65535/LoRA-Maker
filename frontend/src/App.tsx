@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { UpscalePanel } from "./UpscalePanel";
+import { MoviePanel } from "./MoviePanel";
 
 type Dataset = { key:string; name:string; repeats:number; triggerTags:string[]; removedTags:string[] };
 type Project = { rootPath:string; config:{ project:{name:string}; datasets:Dataset[] }; warnings:string[] };
@@ -8,7 +9,7 @@ type Row = { key:string; name:string; sourceImages:Files; videos:Files; captured
 type Progress = { scannedAt:string; totals:Record<string,number>; datasets:Row[]; trainedLora:Files; warnings:string[] };
 type Tools = { comfyui:string; comfyuiMessage:string; sdScripts:string; sdScriptsMessage:string };
 type JobStatus = "queued"|"running"|"completed"|"failed"|"cancelled";
-type Job = { id:string; type:string; status:JobStatus; logs:string[]; error:string|null; createdAt:string; startedAt:string|null; finishedAt:string|null };
+type Job = { id:string; type:string; status:JobStatus; payload:Record<string,string>; logs:string[]; error:string|null; createdAt:string; startedAt:string|null; finishedAt:string|null };
 type TagItem = { tag:string; count:number; rate:number; removed:boolean; protected:boolean };
 type TagSummary = { datasetKey:string; imageCount:number; captionCount:number; tags:TagItem[]; mismatch:{imagesWithoutCaptions:string[];captionsWithoutImages:string[]} };
 type FrameVideo = { name:string; relativePath:string; frameCount:number; state:"unprocessed"|"queued"|"running"|"extracted"|"failed"; jobId:string|null; error:string|null; conflict:string|null };
@@ -45,7 +46,8 @@ export function App(){
  {!project&&<section className="panel"><form className="form" onSubmit={create}><h2>新規プロジェクト</h2><label>作成先<input value={root} onChange={e=>setRoot(e.target.value)} required/></label><label>キャラクター名<input value={name} onChange={e=>setName(e.target.value)} required/></label><button disabled={busy}>作成</button></form></section>}
  {project&&tab==="top"&&<><Dashboard data={progress} scanning={scanning}/><Jobs jobs={jobs} testJob={testJob} cancelJob={cancelJob}/></>}
  {project&&tab==="sourceImages"&&<section className="panel"><h2>01_素材画像</h2><div className="cards">{project.config.datasets.map((x,i)=>{const r=progress?.datasets.find(y=>y.key===x.key);return <article key={x.key}><b>{x.key} · {r?.sourceImages.count??"—"}枚</b><label>表示名<input value={x.name} onChange={e=>update(i,{name:e.target.value})}/></label><label>学習回数<input type="number" min="1" value={x.repeats} onChange={e=>update(i,{repeats:Number(e.target.value)})}/></label><label>識別タグ<input value={x.triggerTags.join(", ")} onChange={e=>update(i,{triggerTags:split(e.target.value)})}/></label>{r&&<Listing group={r.sourceImages}/>}</article>})}</div><form className="add" onSubmit={add}><h3>データセット追加</h3><input pattern="[a-z0-9_]+" placeholder="キー" value={draft.key} onChange={e=>setDraft({...draft,key:e.target.value})} required/><input placeholder="表示名" value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} required/><input type="number" min="1" value={draft.repeats} onChange={e=>setDraft({...draft,repeats:Number(e.target.value)})}/><input placeholder="識別タグ" value={draft.tags} onChange={e=>setDraft({...draft,tags:e.target.value})}/><button>追加</button></form></section>}
- {project&&tab==="videos"&&<FramePanel project={project} jobs={jobs} onJobs={loadJobs} onScan={scan} onMessage={setMessage}/>}
+ {project&&tab==="videos"&&<MoviePanel jobs={jobs} onJobs={loadJobs} onScan={scan} onMessage={setMessage}/>}
+ {project&&tab==="capturedFrames"&&<FramePanel project={project} jobs={jobs} onJobs={loadJobs} onScan={scan} onMessage={setMessage}/>}
  {project&&tab==="upscaledImages"&&<UpscalePanel jobs={jobs} onJobs={loadJobs} onScan={scan} onMessage={setMessage}/>}
  {project&&tab==="rawCaptions"&&<TagPanel project={project} jobs={jobs} onProject={refreshProject} onJobs={loadJobs} onMessage={setMessage}/>}
  {project&&tab!=="top"&&tab!=="sourceImages"&&tab!=="videos"&&tab!=="upscaledImages"&&tab!=="rawCaptions"&&<section className="panel"><p className="eyebrow">READ ONLY</p><h2>{tabs.find(x=>x.key===tab)?.label}</h2>{tab==="trainedLora"?<Listing group={progress?.trainedLora??{count:0,files:[],truncated:false}}/>:<div className="table"><table><thead><tr><th>データセット</th><th>ファイル</th><th>状態</th></tr></thead><tbody>{progress?.datasets.map(r=><tr key={r.key}><td><strong>{r.name}</strong><small>{r.key}</small></td><td>{tab==="training"?<><div>画像 {r.trainingImages.count} / キャプション {r.trainingCaptions.count}</div><Listing group={r.trainingImages}/></>:group(r)&&<Listing group={group(r)!}/>}</td><td>{tab==="capturedFrames"&&<div>{r.captureFolders} 動画フォルダ</div>}{tab==="training"&&<div>正常 {r.matchedPairs} / 不一致 {r.imagesWithoutCaptions+r.captionsWithoutImages}</div>}{r.warnings.map(w=><p className="warn" key={w}>{w}</p>)}</td></tr>)}</tbody></table></div>}</section>}</main>
