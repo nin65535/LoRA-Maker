@@ -1,71 +1,38 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
-type ConnectionState = "checking" | "connected" | "failed";
-type Dataset = { key: string; name: string; repeats: number; triggerTags: string[]; removedTags: string[] };
-type ProjectState = { configPath: string; rootPath: string; config: { application: "lora-maker"; schemaVersion: 1; project: { name: string }; datasets: Dataset[] }; warnings: string[] };
-const labels = { checking: "確認中", connected: "接続済み", failed: "接続できません" };
-const splitTags = (value: string) => value.split(",").map((tag) => tag.trim()).filter(Boolean);
+type Dataset = { key:string; name:string; repeats:number; triggerTags:string[]; removedTags:string[] };
+type Project = { rootPath:string; config:{ project:{name:string}; datasets:Dataset[] }; warnings:string[] };
+type Files = { count:number; files:string[]; truncated:boolean };
+type Row = { key:string; name:string; sourceImages:Files; videos:Files; capturedFrames:Files; captureFolders:number; upscaledImages:Files; rawCaptions:Files; trainingImages:Files; trainingCaptions:Files; matchedPairs:number; imagesWithoutCaptions:number; captionsWithoutImages:number; warnings:string[] };
+type Progress = { scannedAt:string; totals:Record<string,number>; datasets:Row[]; trainedLora:Files; warnings:string[] };
+type Tools = { comfyui:string; comfyuiMessage:string; sdScripts:string; sdScriptsMessage:string };
+type Tab = "top"|"sourceImages"|"videos"|"capturedFrames"|"upscaledImages"|"rawCaptions"|"training"|"trainedLora";
+const tabs:{key:Tab,label:string}[]=[{key:"top",label:"トップ"},{key:"sourceImages",label:"01_素材画像"},{key:"videos",label:"02_動画"},{key:"capturedFrames",label:"03_動画キャプチャ"},{key:"upscaledImages",label:"04_拡大"},{key:"rawCaptions",label:"05_タグ付け"},{key:"training",label:"06_LoRA学習素材"},{key:"trainedLora",label:"07_LoRA"}];
+const split=(value:string)=>value.split(",").map(x=>x.trim()).filter(Boolean);
+async function api<T>(url:string,init?:RequestInit):Promise<T>{const response=await fetch(url,{...init,headers:{"Content-Type":"application/json",...init?.headers}});if(!response.ok){const body=await response.json().catch(()=>({})) as {error?:{message?:string}};throw new Error(body.error?.message??`HTTP ${response.status}`)}return response.json() as Promise<T>}
+function Badge({state,children}:{state:string,children:React.ReactNode}){return <span className={`status status--${state}`}><i/>{children}</span>}
+function Listing({group}:{group:Files}){return group.count?<details><summary>{group.count} 件</summary><ul className="files">{group.files.map(x=><li key={x}>{x}</li>)}</ul>{group.truncated&&<small>先頭200件を表示</small>}</details>:<span className="muted">ファイルなし</span>}
 
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(body.error?.message ?? `HTTP ${response.status}`);
-  }
-  return await response.json() as T;
+export function App(){
+ const [project,setProject]=useState<Project|null>(null),[progress,setProgress]=useState<Progress|null>(null),[tools,setTools]=useState<Tools|null>(null);
+ const [tab,setTab]=useState<Tab>("top"),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[scanning,setScanning]=useState(false);
+ const [root,setRoot]=useState(""),[name,setName]=useState(""),[draft,setDraft]=useState({key:"",name:"",repeats:10,tags:""});
+ const scan=useCallback(async()=>{setScanning(true);try{setProgress(await api("/api/progress"))}catch(e){setMessage(e instanceof Error?e.message:"走査失敗")}finally{setScanning(false)}},[]);
+ const toolCheck=useCallback(async()=>{try{setTools(await api("/api/tools/status"))}catch{setTools(null)}},[]);
+ useEffect(()=>{void(async()=>{try{const p=await api<Project|null>("/api/projects/current");setProject(p);if(p)await scan()}catch(e){setMessage(e instanceof Error?e.message:"読込失敗")}})();void toolCheck()},[scan,toolCheck]);
+ async function perform(action:()=>Promise<Project>,text:string){setBusy(true);setMessage("");try{setProject(await action());setMessage(text);await scan()}catch(e){setMessage(e instanceof Error?e.message:"操作失敗")}finally{setBusy(false)}}
+ async function select(){setBusy(true);try{const p=await api<Project|null>("/api/projects/select",{method:"POST"});if(p){setProject(p);await scan()}}catch(e){setMessage(e instanceof Error?e.message:"操作失敗")}finally{setBusy(false)}}
+ const create=(e:FormEvent)=>{e.preventDefault();void perform(()=>api("/api/projects/create",{method:"POST",body:JSON.stringify({rootPath:root,name,datasets:[]})}),"作成しました")};
+ const add=(e:FormEvent)=>{e.preventDefault();void perform(()=>api("/api/projects/current/datasets",{method:"POST",body:JSON.stringify({key:draft.key,name:draft.name,repeats:draft.repeats,triggerTags:split(draft.tags),removedTags:[]})}),"追加しました")};
+ const save=()=>project&&void perform(()=>api("/api/projects/current",{method:"PUT",body:JSON.stringify(project.config)}),"保存しました");
+ const update=(i:number,patch:Partial<Dataset>)=>project&&setProject({...project,config:{...project.config,datasets:project.config.datasets.map((x,n)=>n===i?{...x,...patch}:x)}});
+ const group=(r:Row):Files|null=>tab==="sourceImages"?r.sourceImages:tab==="videos"?r.videos:tab==="capturedFrames"?r.capturedFrames:tab==="upscaledImages"?r.upscaledImages:tab==="rawCaptions"?r.rawCaptions:null;
+ return <main className="shell"><header><button className="brand" onClick={()=>setTab("top")}><small>LOCAL WORKFLOW CONSOLE</small>LoRA Maker</button><div className="character"><small>CHARACTER</small><strong>{project?.config.project.name??"未選択"}</strong></div><div className="tools"><Badge state={tools?.comfyui??"checking"}>ComfyUI: {tools?.comfyuiMessage??"確認中"}</Badge><Badge state={tools?.sdScripts??"checking"}>sd-scripts: {tools?.sdScriptsMessage??"確認中"}</Badge><button onClick={()=>void toolCheck()}>再確認</button></div></header>
+ <nav><div>{tabs.map(x=><button className={tab===x.key?"active":""} key={x.key} onClick={()=>setTab(x.key)}>{x.label}</button>)}</div></nav>{message&&<p className="message">{message}</p>}
+ <section className="bar"><code>{project?.rootPath??"プロジェクト未選択"}</code><button disabled={busy} onClick={()=>void select()}>プロジェクトを開く</button>{project&&<><button disabled={busy} onClick={save}>設定を保存</button><button disabled={scanning} onClick={()=>void scan()}>{scanning?"走査中…":"再走査"}</button></>}</section>
+ {!project&&<section className="panel"><form className="form" onSubmit={create}><h2>新規プロジェクト</h2><label>作成先<input value={root} onChange={e=>setRoot(e.target.value)} required/></label><label>キャラクター名<input value={name} onChange={e=>setName(e.target.value)} required/></label><button disabled={busy}>作成</button></form></section>}
+ {project&&tab==="top"&&<Dashboard data={progress} scanning={scanning}/>}
+ {project&&tab==="sourceImages"&&<section className="panel"><h2>01_素材画像</h2><div className="cards">{project.config.datasets.map((x,i)=>{const r=progress?.datasets.find(y=>y.key===x.key);return <article key={x.key}><b>{x.key} · {r?.sourceImages.count??"—"}枚</b><label>表示名<input value={x.name} onChange={e=>update(i,{name:e.target.value})}/></label><label>学習回数<input type="number" min="1" value={x.repeats} onChange={e=>update(i,{repeats:Number(e.target.value)})}/></label><label>識別タグ<input value={x.triggerTags.join(", ")} onChange={e=>update(i,{triggerTags:split(e.target.value)})}/></label>{r&&<Listing group={r.sourceImages}/>}</article>})}</div><form className="add" onSubmit={add}><h3>データセット追加</h3><input pattern="[a-z0-9_]+" placeholder="キー" value={draft.key} onChange={e=>setDraft({...draft,key:e.target.value})} required/><input placeholder="表示名" value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} required/><input type="number" min="1" value={draft.repeats} onChange={e=>setDraft({...draft,repeats:Number(e.target.value)})}/><input placeholder="識別タグ" value={draft.tags} onChange={e=>setDraft({...draft,tags:e.target.value})}/><button>追加</button></form></section>}
+ {project&&tab!=="top"&&tab!=="sourceImages"&&<section className="panel"><p className="eyebrow">READ ONLY</p><h2>{tabs.find(x=>x.key===tab)?.label}</h2>{tab==="trainedLora"?<Listing group={progress?.trainedLora??{count:0,files:[],truncated:false}}/>:<div className="table"><table><thead><tr><th>データセット</th><th>ファイル</th><th>状態</th></tr></thead><tbody>{progress?.datasets.map(r=><tr key={r.key}><td><strong>{r.name}</strong><small>{r.key}</small></td><td>{tab==="training"?<><div>画像 {r.trainingImages.count} / キャプション {r.trainingCaptions.count}</div><Listing group={r.trainingImages}/></>:group(r)&&<Listing group={group(r)!}/>}</td><td>{tab==="capturedFrames"&&<div>{r.captureFolders} 動画フォルダ</div>}{tab==="training"&&<div>正常 {r.matchedPairs} / 不一致 {r.imagesWithoutCaptions+r.captionsWithoutImages}</div>}{r.warnings.map(w=><p className="warn" key={w}>{w}</p>)}</td></tr>)}</tbody></table></div>}</section>}</main>
 }
-
-export function App() {
-  const [connection, setConnection] = useState<ConnectionState>("checking");
-  const [project, setProject] = useState<ProjectState | null>(null);
-  const [message, setMessage] = useState("");
-  const [newRoot, setNewRoot] = useState("");
-  const [newName, setNewName] = useState("");
-  const [dataset, setDataset] = useState({ key: "", name: "", repeats: 10, tags: "" });
-  const [busy, setBusy] = useState(false);
-
-  const checkHealth = useCallback(async () => {
-    setConnection("checking");
-    try { await api("/api/health"); setConnection("connected"); } catch { setConnection("failed"); }
-  }, []);
-  const loadCurrent = useCallback(async () => {
-    try { setProject(await api<ProjectState | null>("/api/projects/current")); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "読込に失敗しました"); }
-  }, []);
-  useEffect(() => { void checkHealth(); void loadCurrent(); }, [checkHealth, loadCurrent]);
-
-  async function perform(action: () => Promise<ProjectState>, success: string) {
-    setBusy(true); setMessage("");
-    try { const result = await action(); setProject(result); setMessage(success); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "操作に失敗しました"); }
-    finally { setBusy(false); }
-  }
-  const selectProject = async () => {
-    setBusy(true); setMessage("");
-    try {
-      const selected = await api<ProjectState | null>("/api/projects/select", { method: "POST" });
-      if (selected) { setProject(selected); setMessage("プロジェクトを開きました"); }
-    } catch (error) { setMessage(error instanceof Error ? error.message : "操作に失敗しました"); }
-    finally { setBusy(false); }
-  };
-  const createProject = (event: FormEvent) => { event.preventDefault(); void perform(() => api("/api/projects/create", { method: "POST", body: JSON.stringify({ rootPath: newRoot, name: newName, datasets: [] }) }), "プロジェクトを作成しました"); };
-  const addDataset = (event: FormEvent) => { event.preventDefault(); void perform(() => api("/api/projects/current/datasets", { method: "POST", body: JSON.stringify({ key: dataset.key, name: dataset.name, repeats: dataset.repeats, triggerTags: splitTags(dataset.tags), removedTags: [] }) }), "データセットを追加しました"); };
-  const saveProject = () => { if (project) void perform(() => api("/api/projects/current", { method: "PUT", body: JSON.stringify(project.config) }), "設定を保存しました"); };
-  const updateDataset = (index: number, patch: Partial<Dataset>) => {
-    if (!project) return;
-    const datasets = project.config.datasets.map((item, i) => i === index ? { ...item, ...patch } : item);
-    setProject({ ...project, config: { ...project.config, datasets } });
-  };
-  return <main className="shell">
-    <header className="header"><div><p className="eyebrow">LOCAL WORKFLOW CONSOLE</p><h1>LoRA Maker</h1></div><div className={`connection connection--${connection}`}><span />FastAPI {labels[connection]} <button onClick={() => void checkHealth()}>再確認</button></div></header>
-    {message && <p className="message" role="status">{message}</p>}
-    <section className="panel"><div className="panel-heading"><div><h2>プロジェクト</h2><p className="hint">設定JSONをWindowsのファイル選択画面から選択します。</p></div><button type="button" onClick={() => void selectProject()} disabled={busy}>プロジェクトを開く</button></div>
-      {!project && <form className="form-grid" onSubmit={createProject}><h3>新規作成</h3><label>作成先フォルダ<input value={newRoot} onChange={(e) => setNewRoot(e.target.value)} required /></label><label>キャラクター名<input value={newName} onChange={(e) => setNewName(e.target.value)} required /></label><button disabled={busy}>作成</button></form>}
-    </section>
-    {project && <><section className="project-title"><div><span>現在のプロジェクト</span><h2>{project.config.project.name}</h2><code>{project.rootPath}</code></div><button onClick={saveProject} disabled={busy}>変更を保存</button></section>
-      {project.warnings.length > 0 && <section className="warnings"><strong>フォルダ構成の警告</strong><ul>{project.warnings.map((w) => <li key={w}>{w}</li>)}</ul></section>}
-      <section className="panel"><h2>データセット</h2><div className="dataset-list">{project.config.datasets.map((item, index) => <article className="dataset-card" key={item.key}><div className="dataset-key">{item.key}</div><label>表示名<input value={item.name} onChange={(e) => updateDataset(index, { name: e.target.value })} /></label><label>学習回数<input type="number" min="1" value={item.repeats} onChange={(e) => updateDataset(index, { repeats: Number(e.target.value) })} /></label><label>識別タグ<input value={item.triggerTags.join(", ")} onChange={(e) => updateDataset(index, { triggerTags: splitTags(e.target.value) })} /></label><label>削除対象タグ<input value={item.removedTags.join(", ")} onChange={(e) => updateDataset(index, { removedTags: splitTags(e.target.value) })} /></label></article>)}</div>
-        <form className="add-form" onSubmit={addDataset}><h3>データセット追加</h3><input pattern="[a-z0-9_]+" placeholder="キー" value={dataset.key} onChange={(e) => setDataset({ ...dataset, key: e.target.value })} required /><input placeholder="表示名" value={dataset.name} onChange={(e) => setDataset({ ...dataset, name: e.target.value })} required /><input type="number" min="1" value={dataset.repeats} onChange={(e) => setDataset({ ...dataset, repeats: Number(e.target.value) })} required /><input placeholder="識別タグ（カンマ区切り）" value={dataset.tags} onChange={(e) => setDataset({ ...dataset, tags: e.target.value })} /><button disabled={busy}>追加</button></form>
-      </section></>}
-  </main>;
-}
+function Dashboard({data,scanning}:{data:Progress|null,scanning:boolean}){const metrics=[["素材画像","sourceImages","枚"],["動画","videos","本"],["キャプチャ","capturedFrames","枚"],["拡大","upscaledImages","枚"],["未加工タグ","rawCaptions","件"],["正常ペア","matchedPairs","組"],["LoRA成果物","trainedLora","件"]];return <><section className="summary"><div><p className="eyebrow">PROJECT OVERVIEW</p><h2>工程サマリー</h2><p className="muted">{data?new Date(data.scannedAt).toLocaleString()+" に走査":scanning?"走査中…":"結果なし"}</p></div><div className="metrics">{metrics.map(([l,k,u])=><article key={k}><span>{l}</span><strong>{data?.totals[k]??"—"}</strong><small>{u}</small></article>)}</div></section>{data&&data.warnings.length>0&&<section className="warnings"><h3>確認が必要です</h3><ul>{data.warnings.map((w,i)=><li key={w+i}>{w}</li>)}</ul></section>}</>}
