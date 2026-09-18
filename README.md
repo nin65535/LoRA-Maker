@@ -5,7 +5,7 @@ LoRA制作で繰り返し発生するファイル操作や外部ツールの実�
 ComfyUI、BandiView、ffmpeg、sd-scriptsを置き換えるものではありません。各ツールとプロジェクトデータをつなぎ、動画生成からフレーム抽出、画像選別・拡大、タグ付け、LoRA学習までの流れを管理する「司令塔」を目指しています。
 
 > [!IMPORTANT]
-> 現在はフェーズ7（BandiView選別・画像拡大）まで完了し、選別画像を安全に拡大して学習素材へ配置できます。
+> 現在はフェーズ9（LoRA学習・models配置）まで完了し、学習素材の検証からsd-scripts実行、成果物配置まで行えます。
 
 ## 目指すワークフロー
 
@@ -58,6 +58,11 @@ ComfyUI、BandiView、ffmpeg、sd-scriptsを置き換えるものではありま
   - 既存出力の上書き防止と、失敗時の選別画像保全を実装
   - 一時フォルダで抽出を完了してから`03_動画キャプチャ/<dataset.key>/<動画名>`へ確定し、既存出力を保護
   - 空フォルダの再処理、抽出済み動画のスキップ、動画ごとの失敗・再実行に対応
+- フェーズ8：完了
+  - 素材画像とプリセットからComfyUI動画生成ジョブを登録し、直列実行して`02_動画`へ保全
+- フェーズ9：完了
+  - `external_configs/training_configs/`直下のTOMLを画面から選択してsd-scriptsを実行
+  - 学習素材の整合性検証、`07_LoRA`への成果物保存、modelsフォルダへの安全な配置・削除を実装
 
 全体の進捗は[実装ロードマップ](documents/企画書/06_実装ロードマップ.md)、各フェーズの実測結果は`documents/実装ログ/`を参照してください。
 
@@ -126,11 +131,14 @@ py -3.14 -m venv .venv
 | --- | --- |
 | `documents/` | 仕様、設計、ロードマップ、実装ログ |
 | `app_master.json` | 起動時に検証・キャッシュするアプリ共通マスタ |
-| `comfyui_workflows/` | 実機検証済みのComfyUI APIワークフロー |
+| `external_configs/comfyui_workflows/` | 実機検証済みのComfyUI APIワークフロー |
+| `external_configs/training_configs/` | 画面から選択するsd-scripts学習設定TOML |
 | `scripts/` | 環境確認用スクリプト |
 | `backend/` | FastAPIバックエンド |
 | `frontend/` | Vite + React/TypeScriptフロントエンド |
 | `tests/` | バックエンド自動テスト |
+
+`training_configs/examples/`は検証用サンプル置き場であり、画面の選択肢には表示されません。実運用するTOMLは`training_configs/`直下へ配置します。
 | `phase0/` | フェーズ0の検証用設定 |
 
 `phase0-output/`と`workspace/`はローカルでの検証・作業用であり、Git管理の対象外です。

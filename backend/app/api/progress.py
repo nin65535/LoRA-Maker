@@ -33,7 +33,11 @@ def _comfyui_status(url: str) -> tuple[str, str]:
 async def tool_status(request: Request) -> ToolStatus:
     settings = request.app.state.project_service.settings()
     comfyui, message = await asyncio.to_thread(_comfyui_status, settings.comfyui_api_url)
+    training_jobs = [job for job in request.app.state.job_service.list() if job.type == "lora-training"]
+    active = next((job for job in training_jobs if job.status.value in ("queued", "running")), None)
+    sd_status = active.status.value if active else "idle"
+    sd_message = "学習待機中" if sd_status == "queued" else "LoRA学習を実行中" if sd_status == "running" else "LoRA Makerが開始した学習プロセスはありません"
     return ToolStatus(
         comfyui=comfyui, comfyuiMessage=message,
-        sdScripts="idle", sdScriptsMessage="LoRA Makerが開始した学習プロセスはありません",
+        sdScripts=sd_status, sdScriptsMessage=sd_message,
     )

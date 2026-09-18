@@ -21,7 +21,7 @@
     "lora": [".safetensors", ".ckpt", ".pt"]
   },
   "tagging": {
-    "workflowPath": "comfyui_workflows/tagger.json",
+    "workflowPath": "external_configs/comfyui_workflows/tagger.json",
     "nodes": {
       "sourceImage": { "nodeId": "1", "inputName": "image" },
       "output": { "nodeId": "18", "inputName": "filename_prefix" }
@@ -29,7 +29,7 @@
     "timeoutSeconds": 600
   },
   "imageUpscale": {
-    "workflowPath": "comfyui_workflows/image_upscale.json",
+    "workflowPath": "external_configs/comfyui_workflows/image_upscale.json",
     "nodes": {
       "sourceImage": { "nodeId": "1", "inputName": "image" },
       "output": { "nodeId": "4", "inputName": "filename_prefix" }
@@ -37,7 +37,7 @@
     "timeoutSeconds": 1200
   },
   "movieGeneration": {
-    "workflowPath": "comfyui_workflows/movie_turn.json",
+    "workflowPath": "external_configs/comfyui_workflows/movie_turn.json",
     "nodes": {
       "sourceImage": { "nodeId": "97", "inputName": "image" },
       "positivePrompt": { "nodeId": "124", "inputName": "text" },

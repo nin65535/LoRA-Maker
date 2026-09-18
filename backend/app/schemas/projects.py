@@ -79,3 +79,4 @@ class PersonalSettings(BaseModel):
     sd_scripts_path: str | None = Field(default=None, alias="sdScriptsPath")
     sd_scripts_working_directory: str | None = Field(default=None, alias="sdScriptsWorkingDirectory")
     training_output_path: str | None = Field(default=None, alias="trainingOutputPath")
+    lora_models_path: str | None = Field(default=None, alias="loraModelsPath")

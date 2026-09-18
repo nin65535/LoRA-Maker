@@ -19,6 +19,8 @@ from backend.app.services.tag_service import TagService
 from backend.app.services.frame_service import FrameService
 from backend.app.services.upscale_service import UpscaleService
 from backend.app.services.movie_service import MovieService
+from backend.app.services.training_service import TrainingService
+from backend.app.api.training import router as training_router
 
 
 def create_app(project_service: ProjectService | None = None, job_service: JobService | None = None) -> FastAPI:
@@ -28,10 +30,12 @@ def create_app(project_service: ProjectService | None = None, job_service: JobSe
     active_frame_service = FrameService(active_project_service, active_job_service)
     active_upscale_service = UpscaleService(active_project_service, active_job_service)
     active_movie_service = MovieService(active_project_service, active_job_service)
+    active_training_service = TrainingService(active_project_service, active_job_service)
     active_job_service.register_handler("tagger", active_tag_service.run_tagger)
     active_job_service.register_handler("frame-extraction", active_frame_service.run)
     active_job_service.register_handler("image-upscale", active_upscale_service.run)
     active_job_service.register_handler("movie-generation", active_movie_service.run)
+    active_job_service.register_handler("lora-training", active_training_service.run)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -42,7 +46,7 @@ def create_app(project_service: ProjectService | None = None, job_service: JobSe
         finally:
             await active_job_service.stop()
 
-    app = FastAPI(title="LoRA Maker API", version="0.8.0", lifespan=lifespan)
+    app = FastAPI(title="LoRA Maker API", version="0.9.0", lifespan=lifespan)
     logger = configure_logging()
     app.state.logger = logger
     app.state.project_service = active_project_service
@@ -51,6 +55,7 @@ def create_app(project_service: ProjectService | None = None, job_service: JobSe
     app.state.frame_service = active_frame_service
     app.state.upscale_service = active_upscale_service
     app.state.movie_service = active_movie_service
+    app.state.training_service = active_training_service
 
     app.add_middleware(
         CORSMiddleware,
@@ -69,6 +74,7 @@ def create_app(project_service: ProjectService | None = None, job_service: JobSe
     app.include_router(frames_router, prefix="/api")
     app.include_router(upscale_router, prefix="/api")
     app.include_router(movies_router, prefix="/api")
+    app.include_router(training_router, prefix="/api")
 
     @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def api_not_found(path: str) -> None:
