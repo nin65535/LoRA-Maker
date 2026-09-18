@@ -43,6 +43,14 @@ class TaggingMaster(BaseModel):
     timeout_seconds: int = Field(alias="timeoutSeconds", ge=1)
 
 
+class ImageUpscaleMaster(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    workflow_path: str = Field(alias="workflowPath", min_length=1)
+    nodes: dict[str, WorkflowNode]
+    timeout_seconds: int = Field(alias="timeoutSeconds", ge=1)
+
+
 class MoviePreset(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -69,6 +77,7 @@ class AppMaster(BaseModel):
     default_datasets: list[DatasetConfig] = Field(alias="defaultDatasets")
     file_extensions: FileExtensions = Field(alias="fileExtensions")
     tagging: TaggingMaster
+    image_upscale: ImageUpscaleMaster = Field(alias="imageUpscale")
     movie_generation: MovieGenerationMaster = Field(alias="movieGeneration")
 
     @model_validator(mode="after")

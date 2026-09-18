@@ -1,0 +1,50 @@
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from backend.app.schemas.jobs import Job
+
+
+UpscaleState = Literal["idle", "selected", "queued", "running", "failed"]
+
+
+class SelectionTarget(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    project_config_path: str = Field(alias="projectConfigPath")
+    dataset_key: str = Field(alias="datasetKey")
+    capture_folder: str = Field(alias="captureFolder")
+
+
+class CaptureFolderStatus(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    dataset_key: str = Field(alias="datasetKey")
+    dataset_name: str = Field(alias="datasetName")
+    capture_folder: str = Field(alias="captureFolder")
+    capture_count: int = Field(alias="captureCount")
+    upscaled_count: int = Field(alias="upscaledCount")
+    selected: bool
+    selected_image_count: int = Field(alias="selectedImageCount")
+    state: UpscaleState
+    job_id: str | None = Field(None, alias="jobId")
+    error: str | None = None
+
+
+class UpscaleStatus(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    selection_path: str | None = Field(alias="selectionPath")
+    active_target: SelectionTarget | None = Field(None, alias="activeTarget")
+    folders: list[CaptureFolderStatus]
+
+
+class SelectionStartResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    target: SelectionTarget
+    selection_path: str = Field(alias="selectionPath")
+
+
+class UpscaleRunResult(BaseModel):
+    job: Job

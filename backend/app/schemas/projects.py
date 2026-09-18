@@ -73,6 +73,8 @@ class PersonalSettings(BaseModel):
     last_project_config_path: str | None = Field(default=None, alias="lastProjectConfigPath")
     comfyui_api_url: str = Field(default="http://127.0.0.1:8188", alias="comfyuiApiUrl")
     comfyui_movie_output_path: str | None = Field(default=None, alias="comfyuiMovieOutputPath")
+    bandiview_path: str | None = Field(default=None, alias="bandiviewPath")
+    bandiview_selection_path: str | None = Field(default=None, alias="bandiviewSelectionPath")
     sd_scripts_python_path: str | None = Field(default=None, alias="sdScriptsPythonPath")
     sd_scripts_path: str | None = Field(default=None, alias="sdScriptsPath")
     sd_scripts_working_directory: str | None = Field(default=None, alias="sdScriptsWorkingDirectory")

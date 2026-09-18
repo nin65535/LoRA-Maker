@@ -28,6 +28,14 @@
     },
     "timeoutSeconds": 600
   },
+  "imageUpscale": {
+    "workflowPath": "comfyui_workflows/image_upscale.json",
+    "nodes": {
+      "sourceImage": { "nodeId": "1", "inputName": "image" },
+      "output": { "nodeId": "4", "inputName": "filename_prefix" }
+    },
+    "timeoutSeconds": 1200
+  },
   "movieGeneration": {
     "workflowPath": "comfyui_workflows/movie_turn.json",
     "nodes": {
