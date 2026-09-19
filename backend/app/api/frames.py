@@ -19,6 +19,12 @@ def run(action):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/run-unprocessed", response_model=FrameBatchResult)
+def extract_all_unprocessed(request: Request) -> FrameBatchResult:
+    jobs, skipped = run(lambda: service(request).enqueue_all_unprocessed())
+    return FrameBatchResult(jobs=jobs, skipped=skipped)
+
+
 @router.get("/{dataset_key}", response_model=FrameDatasetStatus)
 def status(dataset_key: str, request: Request) -> FrameDatasetStatus:
     return run(lambda: service(request).status(dataset_key))
@@ -29,8 +35,13 @@ def extract(dataset_key: str, video_name: str, request: Request) -> Job:
     return run(lambda: service(request).enqueue(dataset_key, video_name))
 
 
+@router.post("/{dataset_key}/videos/{video_name}/open-output")
+def open_output(dataset_key: str, video_name: str, request: Request) -> dict[str, bool]:
+    run(lambda: service(request).open_output(dataset_key, video_name))
+    return {"opened": True}
+
+
 @router.post("/{dataset_key}/run-unprocessed", response_model=FrameBatchResult)
 def extract_unprocessed(dataset_key: str, request: Request) -> FrameBatchResult:
     jobs, skipped = run(lambda: service(request).enqueue_unprocessed(dataset_key))
     return FrameBatchResult(jobs=jobs, skipped=skipped)
-

@@ -1,12 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from typing import Annotated
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.schemas.jobs import Job
-
-OutputName = Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9_-]+$")]
-
 
 class TrainingDatasetStatus(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -31,11 +27,11 @@ class TrainingStatus(BaseModel):
     configured: bool
     configuration_errors: list[str] = Field(alias="configurationErrors")
     training_configs: list[str] = Field(alias="trainingConfigs")
+    next_output_name: str = Field(alias="nextOutputName")
 
 
 class TrainingRunRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    output_name: OutputName = Field(alias="outputName")
     config_name: str = Field(alias="configName", min_length=1)
 
 

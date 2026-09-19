@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import subprocess
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -111,6 +112,30 @@ class FrameService:
                 skipped.append(video.name)
         return jobs, skipped
 
+    def enqueue_all_unprocessed(self):
+        state = self.projects.current
+        if state is None:
+            raise FrameServiceError("プロジェクトが開かれていません")
+        jobs, skipped = [], []
+        for dataset in state.config.datasets:
+            dataset_jobs, dataset_skipped = self.enqueue_unprocessed(dataset.key)
+            jobs.extend(dataset_jobs)
+            skipped.extend(f"{dataset.key}/{name}" for name in dataset_skipped)
+        return jobs, skipped
+
+    def open_output(self, key: str, video_name: str) -> None:
+        _, target, videos = self._videos(key)
+        video = next((item for item in videos if item.name == video_name), None)
+        if video is None:
+            raise FrameServiceError("動画が見つかりません")
+        output = (target / video.stem).resolve()
+        if not output.is_dir():
+            raise FrameServiceError("抽出結果フォルダが見つかりません")
+        try:
+            subprocess.Popen(["explorer.exe", str(output)])
+        except OSError as exc:
+            raise FrameServiceError(f"抽出結果フォルダを開けません: {exc}") from exc
+
     async def run(self, payload: dict, log: Callable[[str], None]) -> None:
         key, video_name = payload["datasetKey"], payload["videoName"]
         state, _ = self._context(key)
@@ -154,4 +179,3 @@ class FrameService:
         if process.returncode != 0:
             detail = stderr.decode(errors="replace").strip().splitlines()
             raise FrameServiceError(f"ffmpegが終了コード {process.returncode} で失敗しました: {detail[-1] if detail else '詳細なし'}")
-

@@ -24,7 +24,7 @@ def status(request: Request) -> TrainingStatus:
 
 @router.post("/run", response_model=TrainingRunResult)
 def run(payload: TrainingRunRequest, request: Request) -> TrainingRunResult:
-    return TrainingRunResult(job=call(lambda: service(request).enqueue(payload.output_name, payload.config_name)))
+    return TrainingRunResult(job=call(lambda: service(request).enqueue(payload.config_name)))
 
 
 @router.post("/artifacts/{name}/deploy", response_model=TrainingStatus)

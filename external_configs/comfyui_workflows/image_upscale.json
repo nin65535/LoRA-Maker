@@ -37,13 +37,27 @@
     "inputs": {
       "filename_prefix": "upscaled/anime6b",
       "images": [
-        "3",
+        "5",
         0
       ]
     },
     "class_type": "SaveImage",
     "_meta": {
       "title": "画像を保存"
+    }
+  },
+  "5": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "scale_by": 0.5,
+      "image": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {
+      "title": "4倍拡大結果を50%縮小"
     }
   }
 }

@@ -7,3 +7,4 @@ if (-not (Test-Path -LiteralPath "$repositoryRoot\frontend\dist\index.html")) {
 }
 
 & "$repositoryRoot\.venv\Scripts\python.exe" -m backend.run
+exit $LASTEXITCODE

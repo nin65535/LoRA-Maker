@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
 from backend.app.schemas.jobs import Job
-from backend.app.schemas.upscale import SelectionStartResult, UpscaleRunResult, UpscaleStatus
+from backend.app.schemas.upscale import SelectionStartResult, UpscaleRunRequest, UpscaleRunResult, UpscaleStatus
 from backend.app.services.upscale_service import UpscaleService, UpscaleServiceError
 
 
@@ -32,6 +32,6 @@ def select(dataset_key: str, capture_folder: str, request: Request) -> Selection
 
 
 @router.post("/{dataset_key}/{capture_folder}/run", response_model=UpscaleRunResult)
-def upscale(dataset_key: str, capture_folder: str, request: Request) -> UpscaleRunResult:
-    job: Job = run(lambda: service(request).enqueue(dataset_key, capture_folder))
+def upscale(dataset_key: str, capture_folder: str, payload: UpscaleRunRequest, request: Request) -> UpscaleRunResult:
+    job: Job = run(lambda: service(request).enqueue(dataset_key, capture_folder, payload.scale))
     return UpscaleRunResult(job=job)

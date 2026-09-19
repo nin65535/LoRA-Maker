@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from contextlib import closing
@@ -94,29 +95,85 @@ class UpscaleService:
         self.projects, self.jobs = projects, jobs
         self.state_path = projects.settings_directory / "selection.json"
         self.history_path = projects.settings_directory / "upscale_history.sqlite3"
+        self.bandiview_process: subprocess.Popen | None = None
+        self.bandiview_error: str | None = None
+
+    def _bandiview_running(self) -> bool:
+        return self.bandiview_process is not None
+
+    def _wait_for_bandiview(self, process: subprocess.Popen, target: SelectionTarget,
+                            selection: Path) -> None:
+        try:
+            process.wait()
+            self._import_selection(target, selection)
+        except Exception as exc:
+            self.bandiview_error = str(exc)
+            self.jobs.publish(f"bandiview-import-failed:{exc}")
+        finally:
+            if self.bandiview_process is process:
+                self.bandiview_process = None
+            self.jobs.publish("bandiview-finished")
+
+    def _selected_folder(self, target: SelectionTarget) -> Path:
+        config_path = Path(target.project_config_path).resolve()
+        if not config_path.is_file():
+            raise UpscaleServiceError("選別開始時のプロジェクト設定が見つかりません")
+        return config_path.parent / self.folders["upscaledImages"] / target.dataset_key / target.capture_folder
+
+    def _import_selection(self, target: SelectionTarget, selection: Path) -> None:
+        images = self._images(selection)
+        destination = self._selected_folder(target)
+        destination.mkdir(parents=True, exist_ok=True)
+        conflicts = [item.name for item in images if (destination / item.name).exists()]
+        if conflicts:
+            raise UpscaleServiceError(f"選別済み保存先に同名ファイルがあります: {', '.join(conflicts)}")
+        moved: list[tuple[Path, Path]] = []
+        try:
+            for image in images:
+                target_path = destination / image.name
+                shutil.move(str(image), target_path)
+                moved.append((target_path, image))
+        except Exception:
+            for target_path, original in reversed(moved):
+                if target_path.exists() and not original.exists():
+                    shutil.move(str(target_path), original)
+            raise
+        self.state_path.unlink(missing_ok=True)
 
     def _history_connection(self) -> sqlite3.Connection:
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.history_path)
+        columns = connection.execute("PRAGMA table_info(upscale_history)").fetchall()
+        if columns and not any(row[1] == "scale" for row in columns):
+            connection.execute("ALTER TABLE upscale_history RENAME TO upscale_history_legacy")
         connection.execute("""
             CREATE TABLE IF NOT EXISTS upscale_history (
                 project_config_path TEXT NOT NULL,
                 dataset_key TEXT NOT NULL,
                 source_sha256 TEXT NOT NULL,
+                scale INTEGER NOT NULL,
                 output_sha256 TEXT NOT NULL,
                 training_path TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (project_config_path, dataset_key, source_sha256)
+                PRIMARY KEY (project_config_path, dataset_key, source_sha256, scale)
             )
         """)
         connection.commit()
         return connection
 
-    def _source_history(self, project_path: str, dataset_key: str, digest: str) -> Path | None:
+    def clear_project_history(self, project_path: str) -> None:
+        with closing(self._history_connection()) as connection:
+            connection.execute(
+                "DELETE FROM upscale_history WHERE project_config_path = ?",
+                (project_path,),
+            )
+            connection.commit()
+
+    def _source_history(self, project_path: str, dataset_key: str, digest: str, scale: int) -> Path | None:
         with closing(self._history_connection()) as connection:
             row = connection.execute(
-                "SELECT training_path, output_sha256 FROM upscale_history WHERE project_config_path = ? AND dataset_key = ? AND source_sha256 = ?",
-                (project_path, dataset_key, digest),
+                "SELECT training_path, output_sha256 FROM upscale_history WHERE project_config_path = ? AND dataset_key = ? AND source_sha256 = ? AND scale = ?",
+                (project_path, dataset_key, digest, scale),
             ).fetchone()
         if not row:
             return None
@@ -126,16 +183,16 @@ class UpscaleService:
         return None
 
     def _save_history(self, project_path: str, dataset_key: str,
-                      records: list[tuple[str, str, Path]]) -> None:
+                      scale: int, records: list[tuple[str, str, Path]]) -> None:
         with closing(self._history_connection()) as connection:
             connection.executemany(
-                """INSERT INTO upscale_history (project_config_path, dataset_key, source_sha256, output_sha256, training_path)
-                   VALUES (?, ?, ?, ?, ?)
-                   ON CONFLICT(project_config_path, dataset_key, source_sha256) DO UPDATE SET
+                """INSERT INTO upscale_history (project_config_path, dataset_key, source_sha256, scale, output_sha256, training_path)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(project_config_path, dataset_key, source_sha256, scale) DO UPDATE SET
                      output_sha256 = excluded.output_sha256,
                      training_path = excluded.training_path,
                      created_at = CURRENT_TIMESTAMP""",
-                [(project_path, dataset_key, source_hash, output_hash, str(path))
+                [(project_path, dataset_key, source_hash, scale, output_hash, str(path))
                  for source_hash, output_hash, path in records],
             )
             connection.commit()
@@ -188,8 +245,7 @@ class UpscaleService:
         state = self.projects.current
         if state is None:
             raise UpscaleServiceError("プロジェクトが開かれていません")
-        target, selection = self._target(), self._selection()
-        selected_count = len(self._images(selection)) if selection else 0
+        target = self._target()
         rows = []
         root = Path(state.root_path)
         recent = {}
@@ -199,36 +255,46 @@ class UpscaleService:
                 recent.setdefault(key, job)
         for dataset in state.config.datasets:
             capture_root = root / self.folders["capturedFrames"] / dataset.key
-            upscale_root = root / self.folders["upscaledImages"] / dataset.key
+            selected_root = root / self.folders["upscaledImages"] / dataset.key
             for folder in sorted((p for p in capture_root.iterdir() if p.is_dir()), key=lambda p: p.name.lower()):
                 is_selected = bool(target and target.project_config_path == state.config_path and target.dataset_key == dataset.key and target.capture_folder == folder.name)
+                selected_images = self._images(selected_root / folder.name)
+                scale1_count = sum(self._source_history(state.config_path, dataset.key, _sha256(item), 1) is not None for item in selected_images)
+                scale2_count = sum(self._source_history(state.config_path, dataset.key, _sha256(item), 2) is not None for item in selected_images)
                 job = recent.get((dataset.key, folder.name))
-                row_state = "selected" if is_selected else "idle"
+                row_state = "selected" if selected_images or is_selected else "idle"
                 if job and job.status in (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.FAILED):
                     row_state = "failed" if job.status == JobStatus.FAILED else job.status.value
                 prefix = f"{folder.name}_"
                 rows.append(CaptureFolderStatus(
                     datasetKey=dataset.key, datasetName=dataset.name, captureFolder=folder.name,
                     captureCount=len(self._images(folder)),
-                    upscaledCount=sum(1 for p in self._images(upscale_root) if p.name.startswith(prefix)),
-                    selected=is_selected, selectedImageCount=selected_count if is_selected else 0,
+                    selected=is_selected, selectedImageCount=len(selected_images),
+                    scale1ProcessedCount=scale1_count, scale2ProcessedCount=scale2_count,
                     state=row_state, jobId=job.id if job else None,
-                    error=job.error if job and job.status == JobStatus.FAILED else None,
+                    error=(job.error if job and job.status == JobStatus.FAILED else
+                           self.bandiview_error if is_selected else None),
                 ))
-        return UpscaleStatus(selectionPath=str(selection) if selection else None, activeTarget=target, folders=rows)
+        return UpscaleStatus(
+            selectionPath=str(self._selection()) if self._selection() else None,
+            activeTarget=target,
+            bandiviewRunning=self._bandiview_running(),
+            folders=rows,
+        )
 
     def start_selection(self, key: str, capture_folder: str) -> SelectionTarget:
         state, _ = self._context(key)
+        if self._bandiview_running():
+            raise UpscaleServiceError("BandiViewの起動用プロセスが実行中です")
+        self.bandiview_error = None
         source = (Path(state.root_path) / self.folders["capturedFrames"] / key / capture_folder).resolve()
         capture_root = (Path(state.root_path) / self.folders["capturedFrames"] / key).resolve()
         if not source.is_relative_to(capture_root) or not source.is_dir():
             raise UpscaleServiceError("キャプチャフォルダが見つかりません")
         selection = self._selection(True)
         existing = self._images(selection)
-        current = self._target()
-        same = bool(current and current.project_config_path == state.config_path and current.dataset_key == key and current.capture_folder == capture_folder)
-        if existing and not same:
-            raise UpscaleServiceError("別対象の選別画像が残っています。先に現在の対象を拡大してください")
+        if existing:
+            raise UpscaleServiceError("BandiView画像保存フォルダに未取り込みの選別画像が残っています")
         executable_value = self.projects.settings().bandiview_path
         if not executable_value:
             raise UpscaleServiceError("個人設定でBandiView実行ファイルを設定してください")
@@ -239,41 +305,65 @@ class UpscaleService:
         target = SelectionTarget(projectConfigPath=state.config_path, datasetKey=key, captureFolder=capture_folder)
         _atomic_json_write(self.state_path, target.model_dump(by_alias=True))
         try:
-            subprocess.Popen([str(executable), str(source)])
+            process = subprocess.Popen([str(executable), str(source)])
+            self.bandiview_process = process
+            threading.Thread(
+                target=self._wait_for_bandiview,
+                args=(process, target, selection),
+                name="bandiview-waiter",
+                daemon=True,
+            ).start()
         except OSError as exc:
             self.state_path.unlink(missing_ok=True)
             raise UpscaleServiceError(f"BandiViewを起動できません: {exc}") from exc
         return target
 
-    def enqueue(self, key: str, capture_folder: str):
+    def enqueue(self, key: str, capture_folder: str, scale: int):
         state, _ = self._context(key)
-        target = self._target()
-        if not target or target.project_config_path != state.config_path or target.dataset_key != key or target.capture_folder != capture_folder:
-            raise UpscaleServiceError("このフォルダは現在の選別対象ではありません")
-        selection = self._selection(True)
-        if not self._images(selection):
-            raise UpscaleServiceError("BandiView画像保存フォルダに選別画像がありません")
-        if any(job.type == "image-upscale" and job.status in (JobStatus.QUEUED, JobStatus.RUNNING) for job in self.jobs.list()):
-            raise UpscaleServiceError("画像拡大ジョブが既に待機中または実行中です")
+        capture_root = (Path(state.root_path) / self.folders["capturedFrames"] / key).resolve()
+        capture = (capture_root / capture_folder).resolve()
+        if not capture.is_relative_to(capture_root) or not capture.is_dir():
+            raise UpscaleServiceError("キャプチャフォルダが見つかりません")
+        selected_root = (Path(state.root_path) / self.folders["upscaledImages"] / key).resolve()
+        selected = (selected_root / capture_folder).resolve()
+        if not selected.is_relative_to(selected_root):
+            raise UpscaleServiceError("選別済みフォルダの場所が不正です")
+        images = self._images(selected)
+        if not images:
+            raise UpscaleServiceError("プロジェクト内に選別済み画像がありません")
+        active = [job for job in self.jobs.list() if job.type == "image-upscale"
+                  and job.status in (JobStatus.QUEUED, JobStatus.RUNNING)]
+        if any(job.payload.get("datasetKey") == key and job.payload.get("captureFolder") == capture_folder
+               and int(job.payload.get("scale", 0)) == scale for job in active):
+            raise UpscaleServiceError(f"この対象の拡大×{scale}は既に待機中または実行中です")
+        pending = []
+        for image in images:
+            digest = _sha256(image)
+            if self._source_history(state.config_path, key, digest, scale) is None:
+                pending.append({"name": image.name, "sha256": digest})
+        if not pending:
+            raise UpscaleServiceError(f"選別画像はすべて拡大×{scale}で学習素材へ配置済みです")
         return self.jobs.enqueue("image-upscale", {
-            "datasetKey": key, "captureFolder": capture_folder, "projectConfigPath": state.config_path,
+            "datasetKey": key, "captureFolder": capture_folder, "scale": scale,
+            "projectConfigPath": state.config_path, "images": pending,
         }, state.config_path)
 
     async def run(self, payload: dict, log: Callable[[str], None]) -> None:
         key, capture_folder = payload["datasetKey"], payload["captureFolder"]
+        scale = int(payload["scale"])
+        if scale not in (1, 2):
+            raise UpscaleServiceError("拡大倍率は1または2を指定してください")
         state, dataset = self._context(key)
         if state.config_path != payload["projectConfigPath"]:
             raise UpscaleServiceError("ジョブ登録時と異なるプロジェクトが開かれています")
-        target = self._target()
-        if not target or target.project_config_path != state.config_path or target.dataset_key != key or target.capture_folder != capture_folder:
-            raise UpscaleServiceError("選別対象がジョブ登録時から変更されています")
-        selection = self._selection(True)
-        images = self._images(selection)
+        selection = Path(state.root_path) / self.folders["upscaledImages"] / key / capture_folder
+        requested = payload.get("images", [])
+        images = [selection / item["name"] for item in requested]
         if not images:
             raise UpscaleServiceError("選別画像がありません")
-        unexpected = [item.name for item in selection.iterdir() if not item.is_file() or item.suffix.lower() not in self.image_extensions]
-        if unexpected:
-            raise UpscaleServiceError(f"画像保存フォルダに未対応の項目があります: {', '.join(unexpected)}")
+        for image, expected in zip(images, requested, strict=True):
+            if not image.is_file() or _sha256(image) != expected["sha256"]:
+                raise UpscaleServiceError(f"ジョブ登録後に選別画像が変更されました: {image.name}")
         source_hashes: list[str] = []
         seen_sources: dict[str, str] = {}
         for image in images:
@@ -281,36 +371,38 @@ class UpscaleService:
             if digest in seen_sources:
                 raise UpscaleServiceError(f"今回の選別画像に同一の元画像が含まれています: {seen_sources[digest]} / {image.name}")
             seen_sources[digest] = image.name
-            previous = self._source_history(state.config_path, key, digest)
+            previous = self._source_history(state.config_path, key, digest, scale)
             if previous:
                 raise UpscaleServiceError(f"この元画像は拡大済みです: {image.name} → {previous.name}（ComfyUI処理は開始していません）")
             source_hashes.append(digest)
         root = Path(state.root_path)
-        primary = root / self.folders["upscaledImages"] / key
         training = root / self.folders["trainingDataset"] / f"{dataset.repeats}_{key}"
-        names = [f"{capture_folder}_{image.stem}.png" for image in images]
+        names = [f"{capture_folder}_{image.stem}{'.png' if scale == 2 else image.suffix.lower()}" for image in images]
         if len(set(name.lower() for name in names)) != len(names):
             raise UpscaleServiceError("拡張子だけが異なる同名画像があり、出力名が衝突します")
-        conflicts = [name for name in names if (primary / name).exists()]
-        if conflicts:
-            raise UpscaleServiceError(f"出力先に同名ファイルがあるため上書きできません: {', '.join(conflicts)}")
-        config = self.projects.master_service.value.image_upscale
-        source, output = config.nodes["sourceImage"], config.nodes["output"]
-        upscaler = ComfyUpscaler(self.projects.settings().comfyui_api_url,
-            self.projects.master_service.resolve_app_path(config.workflow_path),
-            source.node_id, source.input_name or "image", output.node_id,
-            output.input_name or "filename_prefix", config.timeout_seconds)
-        primary.mkdir(parents=True, exist_ok=True)
+        upscaler = None
+        if scale == 2:
+            config = self.projects.master_service.value.image_upscale
+            source, output = config.nodes["sourceImage"], config.nodes["output"]
+            upscaler = ComfyUpscaler(self.projects.settings().comfyui_api_url,
+                self.projects.master_service.resolve_app_path(config.workflow_path),
+                source.node_id, source.input_name or "image", output.node_id,
+                output.input_name or "filename_prefix", config.timeout_seconds)
         training.mkdir(parents=True, exist_ok=True)
-        staging = Path(tempfile.mkdtemp(prefix=".upscale-", dir=primary))
+        staging = Path(tempfile.mkdtemp(prefix=".upscale-", dir=training))
         created: list[Path] = []
         try:
             for index, (image, name) in enumerate(zip(images, names, strict=True), 1):
-                data = await asyncio.to_thread(upscaler.upscale, image)
-                if not data:
-                    raise UpscaleServiceError(f"{image.name} の拡大結果が空です")
-                (staging / name).write_bytes(data)
-                log(f"{index}/{len(images)} {image.name} を拡大しました")
+                staged = staging / name
+                if scale == 2:
+                    data = await asyncio.to_thread(upscaler.upscale, image)
+                    if not data:
+                        raise UpscaleServiceError(f"{image.name} の拡大結果が空です")
+                    staged.write_bytes(data)
+                    log(f"{index}/{len(images)} {image.name} を2倍スケールへ拡大しました")
+                else:
+                    shutil.copy2(image, staged)
+                    log(f"{index}/{len(images)} {image.name} を等倍で配置準備しました")
             existing_images = self._images(training)
             by_size: dict[int, list[Path]] = {}
             for existing in existing_images:
@@ -334,29 +426,33 @@ class UpscaleService:
                     raise UpscaleServiceError(f"今回の選別画像に同一内容が含まれています: {seen_new[signature]} / {name}（選別画像は保持しました）")
                 seen_new[signature] = name
             sequence = max((int(item.stem[7:]) for item in existing_images
-                            if item.suffix.lower() == ".png" and item.stem.startswith("sample_")
+                            if item.stem.startswith("sample_")
                             and len(item.stem) == 13 and item.stem[7:].isdigit()), default=0)
-            training_names = [f"sample_{sequence + index:06d}.png" for index in range(1, len(names) + 1)]
+            training_names = [f"sample_{sequence + index:06d}{Path(name).suffix.lower()}"
+                              for index, name in enumerate(names, 1)]
             training_conflicts = [name for name in training_names if (training / name).exists()]
             if training_conflicts:
                 raise UpscaleServiceError(f"学習素材の連番出力先が既に存在します: {', '.join(training_conflicts)}")
             for name, training_name in zip(names, training_names, strict=True):
                 source_file = staging / name
-                for destination in (primary / name, training / training_name):
-                    shutil.copy2(source_file, destination)
-                    created.append(destination)
-                    if not destination.is_file() or destination.stat().st_size != source_file.stat().st_size:
-                        raise UpscaleServiceError(f"保存結果を確認できません: {destination}")
+                destination = training / training_name
+                shutil.copy2(source_file, destination)
+                created.append(destination)
+                if not destination.is_file() or destination.stat().st_size != source_file.stat().st_size:
+                    raise UpscaleServiceError(f"保存結果を確認できません: {destination}")
             records = [(source_hash, _sha256(staging / name), training / training_name)
                        for source_hash, name, training_name in zip(source_hashes, names, training_names, strict=True)]
-            self._save_history(state.config_path, key, records)
-            for image in images:
-                image.unlink()
-            self.state_path.unlink(missing_ok=True)
-            log(f"{len(images)} 枚を04_拡大と06_LoRA学習素材へ保存しました")
+            self._save_history(state.config_path, key, scale, records)
+            log(f"{len(images)} 枚を{scale}倍スケールで06_LoRA学習素材へ保存しました")
         except Exception:
             for path in created:
                 path.unlink(missing_ok=True)
             raise
         finally:
             shutil.rmtree(staging, ignore_errors=True)
+        self.jobs.enqueue("tagger", {
+            "datasetKey": key,
+            "projectConfigPath": state.config_path,
+            "imageNames": training_names,
+        }, state.config_path)
+        log(f"追加した {len(training_names)} 枚の自動タグ付けを登録しました")

@@ -48,8 +48,19 @@ class ProgressApiTests(unittest.TestCase):
         self.assertEqual(body["totals"]["mismatches"], 1)
         self.assertEqual(body["totals"]["trainedLora"], 1)
         self.assertEqual(body["datasets"][0]["captureFolders"], 2)
+        self.assertFalse(body["datasets"][0]["canDelete"])
+        self.assertIn("01_素材画像", body["datasets"][0]["deleteBlockers"])
+        self.assertIn("06_LoRA学習素材", body["datasets"][0]["deleteBlockers"])
         self.assertTrue(any("画像のないキャプション" in item for item in body["warnings"]))
         self.assertTrue(any("空のキャプチャフォルダ" in item for item in body["warnings"]))
+
+    def test_empty_dataset_can_be_deleted(self) -> None:
+        response = self.client.get("/api/progress")
+
+        self.assertEqual(response.status_code, 200)
+        dataset = response.json()["datasets"][0]
+        self.assertTrue(dataset["canDelete"])
+        self.assertEqual(dataset["deleteBlockers"], [])
 
     def test_scan_requires_open_project(self) -> None:
         empty = ProjectService(self.base / "other-settings")

@@ -23,6 +23,8 @@ class DatasetProgress(BaseModel):
     matched_pairs: int = Field(alias="matchedPairs")
     images_without_captions: int = Field(alias="imagesWithoutCaptions")
     captions_without_images: int = Field(alias="captionsWithoutImages")
+    can_delete: bool = Field(alias="canDelete")
+    delete_blockers: list[str] = Field(default_factory=list, alias="deleteBlockers")
     warnings: list[str] = Field(default_factory=list)
 
 

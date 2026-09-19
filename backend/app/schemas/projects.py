@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 
 
 NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+OptionalText = Annotated[str, StringConstraints(strip_whitespace=True)]
 DatasetKey = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]+$")]
 
 
@@ -29,7 +30,8 @@ class DatasetConfig(BaseModel):
 
 
 class ProjectDetails(BaseModel):
-    name: NonEmptyText
+    key: DatasetKey | None = None
+    name: OptionalText = ""
 
 
 class ProjectConfig(BaseModel):
@@ -49,13 +51,25 @@ class ProjectConfig(BaseModel):
 
 
 class ProjectCreateRequest(BaseModel):
-    root_path: NonEmptyText = Field(alias="rootPath")
-    name: NonEmptyText
-    datasets: list[DatasetConfig] = Field(default_factory=list)
+    root_path: NonEmptyText | None = Field(default=None, alias="rootPath")
+    config_path: NonEmptyText | None = Field(default=None, alias="configPath")
+    key: DatasetKey | None = None
+    name: OptionalText = ""
+    datasets: list[DatasetConfig] | None = None
+
+    @model_validator(mode="after")
+    def validate_destination(self) -> "ProjectCreateRequest":
+        if self.root_path is None and self.config_path is None:
+            raise ValueError("rootPath or configPath is required")
+        return self
 
 
 class ProjectLoadRequest(BaseModel):
     config_path: NonEmptyText = Field(alias="configPath")
+
+
+class SavePathSelectRequest(BaseModel):
+    initial_path: str | None = Field(default=None, alias="initialPath")
 
 
 class ProjectState(BaseModel):

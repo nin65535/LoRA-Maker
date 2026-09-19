@@ -1,0 +1,43 @@
+.project-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+}
+
+.path-picker {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.icon-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  padding: 9px;
+  place-items: center;
+}
+
+.icon-button svg {
+  width: 22px;
+  fill: currentColor;
+}
+
+button.danger {
+  color: #fecdd3;
+  border-color: #9f3348;
+  background: #451827;
+}
+
+.metrics button {
+  width: 100%;
+  margin-top: 12px;
+  padding: 6px 8px;
+  font-size: .72rem;
+}
+
+@media (max-width: 700px) {
+  .project-form {
+    grid-template-columns: 1fr;
+  }
+}

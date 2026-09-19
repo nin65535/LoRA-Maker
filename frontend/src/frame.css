@@ -1,0 +1,37 @@
+.frame-table {
+  table-layout: fixed;
+}
+
+.frame-table col:nth-child(1) {
+  width: 14%;
+}
+
+.frame-table col:nth-child(2) {
+  width: 32%;
+}
+
+.frame-table col:nth-child(3) {
+  width: 18%;
+}
+
+.frame-table col:nth-child(4) {
+  width: 11%;
+}
+
+.frame-table col:nth-child(5) {
+  width: 25%;
+}
+
+.frame-name {
+  overflow-wrap: anywhere;
+}
+
+.frame-dataset small {
+  margin-top: 3px;
+}
+
+.frame-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

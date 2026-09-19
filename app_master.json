@@ -5,7 +5,7 @@
     { "key": "sourceImages", "name": "01_素材画像", "role": "素材画像" },
     { "key": "videos", "name": "02_動画", "role": "生成動画" },
     { "key": "capturedFrames", "name": "03_動画キャプチャ", "role": "抽出フレーム" },
-    { "key": "upscaledImages", "name": "04_拡大", "role": "拡大済み画像" },
+    { "key": "upscaledImages", "name": "04_選別・拡大", "role": "選別済み原寸画像" },
     { "key": "generatedTags", "name": "05_タグ付け", "role": "未加工キャプション" },
     { "key": "trainingDataset", "name": "06_LoRA学習素材", "role": "学習画像と加工済みキャプション" },
     { "key": "trainedLora", "name": "07_LoRA", "role": "学習成果物" }
@@ -40,15 +40,15 @@
     "workflowPath": "external_configs/comfyui_workflows/movie_turn.json",
     "nodes": {
       "sourceImage": { "nodeId": "97", "inputName": "image" },
-      "positivePrompt": { "nodeId": "124", "inputName": "text" },
-      "negativePrompt": { "nodeId": "125", "inputName": "text" },
-      "output": { "nodeId": "108", "inputName": null }
+      "positivePrompt": { "nodeId": "93", "inputName": "text" },
+      "negativePrompt": { "nodeId": "89", "inputName": "text" },
+      "output": { "nodeId": "108", "inputName": "filename_prefix" }
     },
     "timeoutSeconds": 3600,
     "presets": [
       { "key": "jump", "name": "ジャンプ", "positivePrompt": "a girl jumps in place,looking forward,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "walking, drifting,camera pan, camera zoom, camera shake,sudden rotation, fast spin,body distortion, twisted neck, broken shoulders,extra arms, extra hands, duplicated face,background warping, flickering,multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" },
-      { "key": "camera_pan", "name": "カメラパン", "positivePrompt": "A single character standing still, full body visible, facing forward, neutral pose. The camera starts at eye level, front view, centered composition. The camera slowly moves upward and backward, smoothly rising above the character. The viewpoint gradually changes to a high-angle shot, looking down diagonally from above. The character remains perfectly still and unchanged. No change in facial expression, clothing, or body proportions. Smooth cinematic camera movement, slow camera crane up, no camera shake. Consistent lighting, consistent background, stable framing,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" },
-      { "key": "turnaround", "name": "その場で一回転", "positivePrompt": "a girl turns and spins in place,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "walking, jumping, drifting,camera pan, camera zoom, camera shake,sudden rotation, fast spin,body distortion, twisted neck, broken shoulders,extra arms, extra hands, duplicated face,background warping, flickering,multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" },
+      { "key": "pan", "name": "カメラパン", "positivePrompt": "A single character standing still, full body visible, facing forward, neutral pose. The camera starts at eye level, front view, centered composition. The camera slowly moves upward and backward, smoothly rising above the character. The viewpoint gradually changes to a high-angle shot, looking down diagonally from above. The character remains perfectly still and unchanged. No change in facial expression, clothing, or body proportions. Smooth cinematic camera movement, slow camera crane up, no camera shake. Consistent lighting, consistent background, stable framing,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" },
+      { "key": "turn", "name": "その場で一回転", "positivePrompt": "a girl turns and spins in place,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "walking, jumping, drifting,camera pan, camera zoom, camera shake,sudden rotation, fast spin,body distortion, twisted neck, broken shoulders,extra arms, extra hands, duplicated face,background warping, flickering,multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" },
       { "key": "walk", "name": "歩く", "positivePrompt": "a girl walking,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" },
       { "key": "crouch", "name": "しゃがむ", "positivePrompt": "Squatting down in place,masterpiece,amazing quality,best quality,detailed hair,detailed eyes", "negativePrompt": "multiple_views,text,signature,bad hands,extra digit,worst quality, low quality,bad anatomy" }
     ]

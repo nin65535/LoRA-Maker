@@ -23,9 +23,10 @@ class CaptureFolderStatus(BaseModel):
     dataset_name: str = Field(alias="datasetName")
     capture_folder: str = Field(alias="captureFolder")
     capture_count: int = Field(alias="captureCount")
-    upscaled_count: int = Field(alias="upscaledCount")
-    selected: bool
     selected_image_count: int = Field(alias="selectedImageCount")
+    scale1_processed_count: int = Field(alias="scale1ProcessedCount")
+    scale2_processed_count: int = Field(alias="scale2ProcessedCount")
+    selected: bool
     state: UpscaleState
     job_id: str | None = Field(None, alias="jobId")
     error: str | None = None
@@ -36,6 +37,7 @@ class UpscaleStatus(BaseModel):
 
     selection_path: str | None = Field(alias="selectionPath")
     active_target: SelectionTarget | None = Field(None, alias="activeTarget")
+    bandiview_running: bool = Field(alias="bandiviewRunning")
     folders: list[CaptureFolderStatus]
 
 
@@ -48,3 +50,7 @@ class SelectionStartResult(BaseModel):
 
 class UpscaleRunResult(BaseModel):
     job: Job
+
+
+class UpscaleRunRequest(BaseModel):
+    scale: Literal[1, 2]

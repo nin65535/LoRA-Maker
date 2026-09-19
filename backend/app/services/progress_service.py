@@ -9,6 +9,7 @@ from backend.app.schemas.progress import (
 )
 from backend.app.schemas.projects import ProjectState
 from backend.app.schemas.master import AppMaster
+from backend.app.services.dataset_storage import dataset_delete_blockers
 LIST_LIMIT = 200
 
 
@@ -31,6 +32,7 @@ def _group(path: Path, extensions: set[str], recursive: bool = True) -> tuple[Fi
 def scan_project(state: ProjectState, master: AppMaster) -> ProjectProgress:
     root = Path(state.root_path)
     folder = {item.key: root / item.name for item in master.folders}
+    folder_names = {item.key: item.name for item in master.folders}
     image_extensions = set(master.file_extensions.images)
     video_extensions = set(master.file_extensions.videos)
     lora_extensions = set(master.file_extensions.lora)
@@ -65,13 +67,15 @@ def scan_project(state: ProjectState, master: AppMaster) -> ProjectProgress:
             item_warnings.append(f"キャプションのない学習画像が {missing_captions} 件あります")
         if missing_images:
             item_warnings.append(f"画像のないキャプションが {missing_images} 件あります")
+        delete_blockers = dataset_delete_blockers(root, folder_names, config)
         datasets.append(DatasetProgress(
             key=config.key, name=config.name, sourceImages=source_group, videos=video_group,
             capturedFrames=capture_group, captureFolders=capture_folders,
             upscaledImages=upscale_group, rawCaptions=raw_group,
             trainingImages=training_images, trainingCaptions=training_captions,
             matchedPairs=len(image_stems & caption_stems), imagesWithoutCaptions=missing_captions,
-            captionsWithoutImages=missing_images, warnings=item_warnings,
+            captionsWithoutImages=missing_images, canDelete=not delete_blockers,
+            deleteBlockers=delete_blockers, warnings=item_warnings,
         ))
         warnings.extend(f"{config.name}: {message}" for message in item_warnings)
 

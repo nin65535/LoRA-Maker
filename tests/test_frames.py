@@ -66,7 +66,7 @@ class FrameApiTests(unittest.TestCase):
             (output / "frame_000001.png").write_bytes(b"frame")
 
         with patch.object(type(self.client.app.state.frame_service), "_run_ffmpeg", fake_run):
-            response = self.client.post("/api/frames/face/run-unprocessed")
+            response = self.client.post("/api/frames/run-unprocessed")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(len(response.json()["jobs"]), 2)
             jobs = self.wait_until_settled(2)
@@ -76,6 +76,17 @@ class FrameApiTests(unittest.TestCase):
         self.assertFalse(any(item.name.endswith(".extracting") for item in capture.iterdir()))
         states = {item["name"]: item["state"] for item in self.client.get("/api/frames/face").json()["videos"]}
         self.assertEqual(states, {"bad.mp4": "failed", "ok.mp4": "extracted"})
+
+    @patch("backend.app.services.frame_service.subprocess.Popen")
+    def test_opens_extracted_frame_folder(self, popen) -> None:
+        output = self.root / "03_動画キャプチャ/face/ok"
+        output.mkdir()
+        (output / "frame_000001.png").write_bytes(b"frame")
+
+        response = self.client.post("/api/frames/face/videos/ok.mp4/open-output")
+
+        self.assertEqual(response.status_code, 200)
+        popen.assert_called_once_with(["explorer.exe", str(output.resolve())])
 
 
 if __name__ == "__main__":

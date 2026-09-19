@@ -25,6 +25,7 @@ class JobService:
         self._wake = asyncio.Event()
         self._subscribers: set[asyncio.Queue[str]] = set()
         self._worker: asyncio.Task[None] | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._stopping = False
         self._initialized = False
         self._handlers: dict[str, Callable[[dict[str, Any], Callable[[str], None]], Awaitable[None]]] = {}
@@ -86,6 +87,7 @@ class JobService:
 
     async def start(self) -> None:
         self._ensure_initialized()
+        self._loop = asyncio.get_running_loop()
         self._stopping = False
         self._worker = asyncio.create_task(self._run(), name="job-worker")
         self._wake.set()
@@ -100,6 +102,12 @@ class JobService:
             except asyncio.CancelledError:
                 pass
             self._worker = None
+        self._loop = None
+
+    def publish(self, event: str) -> None:
+        loop = self._loop
+        if loop is not None and loop.is_running():
+            loop.call_soon_threadsafe(self._publish, event)
 
     def create_test_job(self, duration: float, should_fail: bool, project_path: str | None) -> Job:
         return self.enqueue("test", {"durationSeconds": duration, "shouldFail": should_fail}, project_path)
@@ -160,6 +168,17 @@ class JobService:
                 (JobStatus.QUEUED, JobStatus.RUNNING),
             ).fetchone()[0]
         return count > 0
+
+    def clear_history(self) -> int:
+        self._ensure_initialized()
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM jobs WHERE status NOT IN (?, ?)",
+                (JobStatus.QUEUED, JobStatus.RUNNING),
+            )
+            deleted = cursor.rowcount
+        self._publish("jobs-changed")
+        return deleted
 
     async def events(self) -> AsyncIterator[str]:
         queue: asyncio.Queue[str] = asyncio.Queue(maxsize=8)

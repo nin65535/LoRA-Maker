@@ -1,0 +1,93 @@
+.dataset-table {
+  display: grid;
+  gap: 8px;
+}
+
+.dataset-head,
+.dataset-row {
+  display: grid;
+  grid-template-columns: minmax(130px, .7fr) minmax(160px, 1fr) 110px minmax(260px, 2fr) minmax(130px, .8fr) 42px;
+  gap: 12px;
+  align-items: end;
+}
+
+.dataset-head {
+  padding: 0 12px;
+  color: #718096;
+  font-size: .68rem;
+}
+
+.dataset-row {
+  padding: 12px;
+  border: 1px solid #223047;
+  border-radius: 10px;
+  background: #0a111d;
+}
+
+.dataset-row label > span {
+  display: none;
+}
+
+.dataset-key {
+  align-self: center;
+}
+
+.dataset-key b,
+.dataset-key small {
+  display: block;
+}
+
+.dataset-key b {
+  color: #54c8f5;
+}
+
+.dataset-key small {
+  margin-top: 4px;
+  color: #7d8ca1;
+}
+
+.dataset-files {
+  align-self: center;
+  min-width: 0;
+}
+
+.dataset-icon-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  padding: 9px;
+  place-items: center;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.dataset-icon-button svg {
+  width: 21px;
+  fill: currentColor;
+}
+
+.dataset-icon-button.danger {
+  color: #fb7185;
+}
+
+.dataset-add {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #1d293a;
+}
+
+.dataset-add h3 {
+  margin-top: 0;
+}
+
+@media (max-width: 1000px) {
+  .dataset-table,
+  .dataset-add {
+    overflow-x: auto;
+  }
+
+  .dataset-head,
+  .dataset-row {
+    min-width: 900px;
+  }
+}

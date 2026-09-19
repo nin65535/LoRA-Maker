@@ -22,7 +22,7 @@ class ComfyMovieGenerator:
         self.api_url = api_url.rstrip("/")
         self.workflow_path, self.nodes, self.timeout = workflow_path, nodes, timeout
 
-    def generate(self, image: Path, positive: str, negative: str) -> None:
+    def generate(self, image: Path, positive: str, negative: str, output_prefix: str) -> None:
         boundary = "----LoRAMakerUpload"
         body = (f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="{image.name}"\r\n'
                 'Content-Type: application/octet-stream\r\n\r\n').encode()
@@ -32,10 +32,26 @@ class ComfyMovieGenerator:
             workflow = json.loads(self.workflow_path.read_text(encoding="utf-8"))
             for key, value in (("sourceImage", uploaded["name"]), ("positivePrompt", positive), ("negativePrompt", negative)):
                 node = self.nodes[key]
+                if node.node_id not in workflow:
+                    raise MovieServiceError(f"{key}のノードID {node.node_id} がワークフローにありません")
+                inputs = workflow[node.node_id].get("inputs")
+                if not isinstance(inputs, dict) or node.input_name not in inputs:
+                    raise MovieServiceError(
+                        f"{key}の入力名 {node.input_name} がノード {node.node_id} にありません"
+                    )
                 workflow[node.node_id]["inputs"][node.input_name] = value
             output_node = self.nodes["output"].node_id
             if output_node not in workflow:
-                raise KeyError(output_node)
+                raise MovieServiceError(f"outputのノードID {output_node} がワークフローにありません")
+            output_input = self.nodes["output"].input_name
+            output_inputs = workflow[output_node].get("inputs")
+            if not isinstance(output_inputs, dict) or output_input not in output_inputs:
+                raise MovieServiceError(
+                    f"outputの入力名 {output_input} がノード {output_node} にありません"
+                )
+            output_inputs[output_input] = output_prefix
+        except MovieServiceError:
+            raise
         except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
             raise MovieServiceError(f"動画生成ワークフローが設定と一致しません: {exc}") from exc
         prompt_id = self._json("/prompt", json.dumps({"prompt": workflow}).encode(), "application/json").get("prompt_id")
@@ -119,10 +135,14 @@ class MovieService:
             raise MovieServiceError("個人設定でComfyUI動画専用出力フォルダを設定してください")
         path = Path(value).expanduser().resolve()
         project = Path(project_root).resolve()
-        if not path.is_dir():
-            raise MovieServiceError("ComfyUI動画専用出力フォルダが見つかりません")
         if path.parent == path or project == path or project.is_relative_to(path):
             raise MovieServiceError("ComfyUI動画専用出力フォルダに危険な上位フォルダは指定できません")
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise MovieServiceError(f"ComfyUI動画専用出力フォルダを作成できません: {exc}") from exc
+        if not path.is_dir():
+            raise MovieServiceError("ComfyUI動画専用出力フォルダを作成できません")
         return path
 
     @staticmethod
@@ -132,6 +152,15 @@ class MovieService:
                 shutil.rmtree(child)
             else:
                 child.unlink()
+
+    @staticmethod
+    def _comfy_output_prefix(folder: Path) -> str:
+        output_parent = next(
+            (parent for parent in (folder, *folder.parents) if parent.name.lower() == "output"),
+            None,
+        )
+        relative = folder.relative_to(output_parent) if output_parent is not None else Path(folder.name)
+        return (relative / "lora_maker").as_posix()
 
     async def run(self, payload: dict, log: Callable[[str], None]) -> None:
         state, _ = self._context(payload["datasetKey"])
@@ -154,18 +183,28 @@ class MovieService:
         generator = ComfyMovieGenerator(self.projects.settings().comfyui_api_url,
             self.projects.master_service.resolve_app_path(config.workflow_path), config.nodes, config.timeout_seconds)
         log(f"{source.name} / {preset.name} をComfyUIへ送信します")
-        await asyncio.to_thread(generator.generate, source, preset.positive_prompt, preset.negative_prompt)
+        await asyncio.to_thread(
+            generator.generate,
+            source,
+            preset.positive_prompt,
+            preset.negative_prompt,
+            self._comfy_output_prefix(temporary),
+        )
         outputs = [item for item in temporary.rglob("*") if item.is_file()]
         videos = [item for item in outputs if item.suffix.lower() in set(self.projects.master_service.value.file_extensions.videos)]
         if len(videos) != 1 or len(outputs) != 1:
             raise MovieServiceError(f"専用一時出力から動画1本を特定できません（全{len(outputs)}件、動画{len(videos)}件）")
+        if videos[0].suffix.lower() != ".mp4":
+            raise MovieServiceError(f"生成動画の形式がmp4ではありません: {videos[0].suffix}")
         destination_dir = Path(state.root_path) / self.folders["videos"] / key
         destination_dir.mkdir(parents=True, exist_ok=True)
-        pattern = re.compile(rf"^{re.escape(preset_key)}_(\d{{3,}})$", re.IGNORECASE)
+        source_name = source.stem
+        prefix = f"{source_name}_{preset_key}"
+        pattern = re.compile(rf"^{re.escape(prefix)}_(\d{{3,}})$", re.IGNORECASE)
         numbers = [int(match.group(1)) for item in destination_dir.iterdir()
                    if item.is_file() and (match := pattern.match(item.stem))]
         number = max(numbers, default=0) + 1
-        destination = destination_dir / f"{preset_key}_{number:03d}{videos[0].suffix.lower()}"
+        destination = destination_dir / f"{prefix}_{number:03d}.mp4"
         if destination.exists():
             raise MovieServiceError(f"保存先が既に存在するため上書きできません: {destination.name}")
         shutil.copy2(videos[0], destination)

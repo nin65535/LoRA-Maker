@@ -1,6 +1,9 @@
 import asyncio
 import hashlib
+import re
 import shutil
+import threading
+from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -25,6 +28,7 @@ class TrainingService:
     def __init__(self, projects: ProjectService, jobs: JobService) -> None:
         self.projects, self.jobs = projects, jobs
         self.process: asyncio.subprocess.Process | None = None
+        self._enqueue_lock = threading.Lock()
         self.config_directory = Path(__file__).parents[3] / "external_configs" / "training_configs"
 
     def _state(self):
@@ -46,7 +50,10 @@ class TrainingService:
                   (script.is_file(), "学習スクリプトが未設定または存在しません"),
                   (working.is_dir(), "sd-scripts作業ディレクトリが未設定または存在しません"),
                   (self.config_directory.is_dir(), "学習設定フォルダが存在しません")]
-        return [message for valid, message in checks if not valid]
+        errors = [message for valid, message in checks if not valid]
+        if not self._state().config.project.key:
+            errors.append("プロジェクトキーが未設定です")
+        return errors
 
     def training_configs(self) -> list[str]:
         if not self.config_directory.is_dir():
@@ -109,9 +116,24 @@ class TrainingService:
         if not configs:
             errors.append("利用できる学習設定TOMLがありません")
         return TrainingStatus(datasets=self._dataset_statuses(), artifacts=artifacts,
-                              configured=not errors, configurationErrors=errors, trainingConfigs=configs)
+                              configured=not errors, configurationErrors=errors, trainingConfigs=configs,
+                              nextOutputName=self._next_output_name())
 
-    def enqueue(self, output_name: str, config_name: str):
+    def _next_output_name(self) -> str:
+        state = self._state()
+        project_key = state.config.project.key
+        if not project_key:
+            return ""
+        prefix = f"{datetime.now().strftime('%y%m%d')}_{project_key}_"
+        pattern = re.compile(rf"^{re.escape(prefix)}(\d+)(?:$|[-_.])", re.IGNORECASE)
+        output = Path(state.root_path) / self.projects.master_service.folder_map["trainedLora"]
+        names = [item.stem for item in output.iterdir() if item.is_file()] if output.is_dir() else []
+        names.extend(str(job.payload.get("outputName", "")) for job in self.jobs.list(10000)
+                     if job.type == "lora-training" and job.project_config_path == state.config_path)
+        sequence = max((int(match.group(1)) for name in names if (match := pattern.match(name))), default=0) + 1
+        return f"{prefix}{sequence:03d}"
+
+    def enqueue(self, config_name: str):
         state = self._state()
         statuses = self._dataset_statuses()
         if not statuses or sum(item.matched_pairs for item in statuses) == 0:
@@ -123,7 +145,9 @@ class TrainingService:
         if errors:
             raise TrainingServiceError(" / ".join(errors))
         self._training_config(config_name)
-        return self.jobs.enqueue("lora-training", {"outputName": output_name, "configName": config_name}, state.config_path)
+        with self._enqueue_lock:
+            output_name = self._next_output_name()
+            return self.jobs.enqueue("lora-training", {"outputName": output_name, "configName": config_name}, state.config_path)
 
     async def run(self, payload: dict, log) -> None:
         state = self._state()
@@ -132,6 +156,8 @@ class TrainingService:
         train_dir = Path(state.root_path) / self.projects.master_service.folder_map["trainingDataset"]
         output_dir = Path(state.root_path) / self.projects.master_service.folder_map["trainedLora"]
         output_dir.mkdir(parents=True, exist_ok=True)
+        if any(output_dir.glob(payload["outputName"] + "*")):
+            raise TrainingServiceError(f"同じ連番の学習成果物が既に存在します: {payload['outputName']}")
         before = {p.resolve() for p in output_dir.iterdir() if p.is_file()}
         try:
             settings = self.projects.settings()

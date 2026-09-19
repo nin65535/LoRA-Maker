@@ -43,6 +43,26 @@ class MasterServiceTests(unittest.TestCase):
 
         self.assertEqual([item.key for item in presets], ["custom_motion", "second"])
 
+    def test_movie_workflow_nodes_match_bundled_workflow(self) -> None:
+        service = MasterService(self.source)
+        config = service.value.movie_generation
+        workflow = json.loads(service.resolve_app_path(config.workflow_path).read_text(encoding="utf-8"))
+
+        for name in ("sourceImage", "positivePrompt", "negativePrompt", "output"):
+            node = config.nodes[name]
+            self.assertIn(node.node_id, workflow, name)
+            self.assertIn(node.input_name, workflow[node.node_id]["inputs"], name)
+
+    def test_upscale_workflow_reduces_four_times_output_to_two_times(self) -> None:
+        service = MasterService(self.source)
+        config = service.value.image_upscale
+        workflow = json.loads(service.resolve_app_path(config.workflow_path).read_text(encoding="utf-8"))
+
+        resize = workflow["5"]
+        self.assertEqual(resize["class_type"], "ImageScaleBy")
+        self.assertEqual(resize["inputs"]["scale_by"], 0.5)
+        self.assertEqual(workflow[config.nodes["output"].node_id]["inputs"]["images"], ["5", 0])
+
 
 if __name__ == "__main__":
     unittest.main()

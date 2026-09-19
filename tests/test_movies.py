@@ -47,9 +47,23 @@ class MovieApiTests(unittest.TestCase):
         self.assertEqual(response.json()["images"][0]["relativePath"], "source.png")
         self.assertTrue(response.json()["presets"])
 
+    def test_builds_comfy_output_prefix_inside_configured_folder(self) -> None:
+        from backend.app.services.movie_service import MovieService
+
+        self.assertEqual(
+            MovieService._comfy_output_prefix(Path(r"G:\ComfyUI\output\LoraMaker")),
+            "LoraMaker/lora_maker",
+        )
+        self.assertEqual(
+            MovieService._comfy_output_prefix(Path(r"G:\custom-video-output")),
+            "custom-video-output/lora_maker",
+        )
+
     def test_generates_serial_number_and_cleans_temporary_output(self) -> None:
         videos = self.root / "02_動画/face"
-        (videos / "walk_004.mp4").write_bytes(b"old")
+        (videos / "source_walk_004.mp4").write_bytes(b"old")
+        (videos / "other_walk_099.mp4").write_bytes(b"other-source")
+        (videos / "source_jump_099.mp4").write_bytes(b"other-preset")
 
         def generate(*_) -> None:
             (self.output / "comfy-result.mp4").write_bytes(b"generated-video")
@@ -58,9 +72,23 @@ class MovieApiTests(unittest.TestCase):
             response = self.client.post("/api/movies/queue", json={"datasetKey": "face", "imagePath": "source.png", "presetKey": "walk"})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(self.wait()[0]["status"], "completed")
-        self.assertEqual((videos / "walk_005.mp4").read_bytes(), b"generated-video")
+        self.assertEqual((videos / "source_walk_005.mp4").read_bytes(), b"generated-video")
         self.assertEqual(list(self.output.iterdir()), [])
         self.assertEqual(self.source.read_bytes(), b"image")
+
+    def test_recreates_missing_temporary_output_before_generation(self) -> None:
+        self.output.rmdir()
+
+        def generate(*_) -> None:
+            self.assertTrue(self.output.is_dir())
+            (self.output / "comfy-result.mp4").write_bytes(b"generated-video")
+
+        with patch("backend.app.services.movie_service.ComfyMovieGenerator.generate", side_effect=generate):
+            response = self.client.post("/api/movies/queue", json={"datasetKey": "face", "imagePath": "source.png", "presetKey": "walk"})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(self.wait()[0]["status"], "completed")
+        self.assertTrue(self.output.is_dir())
+        self.assertEqual(list(self.output.iterdir()), [])
 
     def test_output_recovery_failure_keeps_generated_files(self) -> None:
         def generate(*_) -> None:

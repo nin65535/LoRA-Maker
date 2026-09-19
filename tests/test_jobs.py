@@ -49,6 +49,11 @@ class JobApiTests(unittest.TestCase):
         job = self.client.post("/api/jobs/test", json={"durationSeconds": .3}).json()
         response = self.client.post("/api/projects/create", json={"rootPath": str(self.base / "project"), "name": "Blocked", "datasets": []})
         self.assertEqual(response.status_code, 409)
+        response = self.client.post("/api/projects/close")
+        self.assertEqual(response.status_code, 409)
+        settings = self.client.get("/api/projects/settings").json()
+        response = self.client.put("/api/projects/settings", json=settings)
+        self.assertEqual(response.status_code, 409)
         self.wait_for(job["id"], "completed")
 
     def test_running_job_is_marked_failed_after_restart(self) -> None:
@@ -64,6 +69,16 @@ class JobApiTests(unittest.TestCase):
         recovered = JobService(path).get(job.id)
         self.assertEqual(recovered.status, "failed")
         self.assertIn("再実行", recovered.error)
+
+    def test_clear_history_deletes_finished_jobs(self) -> None:
+        job = self.client.post("/api/jobs/test", json={"durationSeconds": .05}).json()
+        self.wait_for(job["id"], "completed")
+
+        response = self.client.delete("/api/jobs/history")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"deleted": 1})
+        self.assertEqual(self.client.get("/api/jobs").json(), [])
 
 
 if __name__ == "__main__":

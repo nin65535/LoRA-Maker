@@ -154,6 +154,13 @@ class TagService:
             raise TagServiceError("ジョブ登録時と異なるプロジェクトが開かれています")
         folder = Path(state.root_path) / self.folders["trainingDataset"] / f"{dataset.repeats}_{key}"
         images = sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in self.image_extensions)
+        requested_names = payload.get("imageNames")
+        if requested_names is not None:
+            requested = set(requested_names)
+            images = [image for image in images if image.name in requested]
+            missing = sorted(requested - {image.name for image in images})
+            if missing:
+                raise TagServiceError(f"自動タグ付け対象の画像が見つかりません: {', '.join(missing)}")
         if not images:
             raise TagServiceError("タグ付け対象の画像がありません")
         config = self.projects.master_service.value.tagging

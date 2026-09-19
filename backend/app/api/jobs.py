@@ -19,6 +19,11 @@ def list_jobs(request: Request, limit: int = Query(100, ge=1, le=500)) -> list[J
     return service(request).list(limit)
 
 
+@router.delete("/history", response_model=dict[str, int])
+def clear_job_history(request: Request) -> dict[str, int]:
+    return {"deleted": service(request).clear_history()}
+
+
 @router.get("/{job_id}", response_model=Job)
 def get_job(job_id: str, request: Request) -> Job:
     try:
