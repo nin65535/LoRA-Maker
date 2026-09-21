@@ -1,8 +1,10 @@
 import asyncio
 import hashlib
+import math
 import re
 import shutil
 import threading
+import tomllib
 from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -67,6 +69,40 @@ class TrainingService:
         if not path.is_relative_to(self.config_directory.resolve()) or not path.is_file():
             raise TrainingServiceError("選択された学習設定TOMLが見つかりません")
         return path
+
+    def _calculated_max_train_steps(self, config: Path, train_dir: Path) -> int | None:
+        try:
+            values = tomllib.loads(config.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
+            raise TrainingServiceError(f"学習設定TOMLを読み込めません: {exc}") from exc
+
+        # kohya_ss GUI only derives max_train_steps from epoch when the explicit
+        # maximum is zero. Keep the same distinction when invoking sd-scripts directly.
+        if values.get("max_train_steps") != 0 or "epoch" not in values:
+            return None
+        try:
+            epoch = int(values["epoch"])
+            batch_size = int(values.get("train_batch_size", 1))
+            accumulation = int(values.get("gradient_accumulation_steps", 1))
+        except (TypeError, ValueError) as exc:
+            raise TrainingServiceError("epoch、train_batch_size、gradient_accumulation_stepsは整数で指定してください") from exc
+        if epoch < 1 or batch_size < 1 or accumulation < 1:
+            raise TrainingServiceError("epoch、train_batch_size、gradient_accumulation_stepsは1以上で指定してください")
+
+        image_ext = set(self.projects.master_service.value.file_extensions.images)
+        weighted_images = 0
+        for folder in train_dir.iterdir() if train_dir.is_dir() else []:
+            if not folder.is_dir():
+                continue
+            try:
+                repeats = int(folder.name.split("_", 1)[0])
+            except ValueError:
+                continue
+            image_count = sum(1 for item in folder.iterdir() if item.is_file() and item.suffix.lower() in image_ext)
+            weighted_images += repeats * image_count
+        if weighted_images < 1:
+            raise TrainingServiceError("epochからステップ数を計算できる学習画像がありません")
+        return math.ceil(weighted_images / batch_size / accumulation * epoch)
 
     def _dataset_statuses(self) -> list[TrainingDatasetStatus]:
         state = self._state()
@@ -170,6 +206,10 @@ class TrainingService:
             log(f"ComfyUIのモデル解放を確認できませんでした（学習は続行）: {exc}")
         command = [str(python), str(script), "--config_file", str(config), "--train_data_dir", str(train_dir),
                    "--output_dir", str(output_dir), "--output_name", payload["outputName"]]
+        calculated_steps = self._calculated_max_train_steps(config, train_dir)
+        if calculated_steps is not None:
+            command.extend(["--max_train_steps", str(calculated_steps)])
+            log(f"epochと学習素材からmax_train_stepsを計算しました: {calculated_steps}")
         log(f"学習を開始します: {payload['outputName']}")
         self.process = await asyncio.create_subprocess_exec(*command, cwd=working,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)

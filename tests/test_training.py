@@ -81,6 +81,37 @@ class TrainingApiTests(unittest.TestCase):
                 time.sleep(.02)
             self.assertEqual(jobs[0]["status"], "completed")
 
+    def test_epoch_calculates_max_train_steps_when_configured_steps_are_zero(self) -> None:
+        (self.configs / "train.toml").write_text(
+            "epoch = 20\nmax_train_steps = 0\ntrain_batch_size = 3\ngradient_accumulation_steps = 1\n",
+            encoding="utf-8",
+        )
+        commands = []
+
+        class Process:
+            returncode = 0
+            def __init__(self): self.stdout = self
+            async def readline(self): return b""
+            async def wait(self):
+                (self_outer.root / f"07_LoRA/{self_outer.output_prefix}001.safetensors").write_bytes(b"lora")
+                return 0
+
+        def create_process(*command, **_kwargs):
+            commands.append(command)
+            return Process()
+
+        self_outer = self
+        with patch("backend.app.services.training_service.asyncio.create_subprocess_exec", side_effect=create_process), patch("backend.app.services.training_service.urlopen"):
+            self.assertEqual(self.client.post("/api/training/run", json={"configName": "train.toml"}).status_code, 200)
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline and not commands:
+                time.sleep(.02)
+
+        self.assertTrue(commands)
+        index = commands[0].index("--max_train_steps")
+        # 1 image * 10 folder repeats / batch 3 * 20 epochs = ceil(66.66...)
+        self.assertEqual(commands[0][index + 1], "67")
+
     def test_output_sequence_uses_existing_artifacts(self) -> None:
         (self.root / f"07_LoRA/{self.output_prefix}009.safetensors").write_bytes(b"old")
         status = self.client.get("/api/training").json()
