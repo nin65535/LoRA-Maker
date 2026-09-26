@@ -2,6 +2,11 @@
   grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
 }
 
+nav button:disabled {
+  color: #5b687b;
+  cursor: not-allowed;
+}
+
 .path-picker {
   display: grid;
   grid-column: 1 / -1;

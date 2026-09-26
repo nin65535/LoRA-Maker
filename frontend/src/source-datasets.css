@@ -91,3 +91,29 @@
     min-width: 900px;
   }
 }
+
+.source-folders {
+  display: grid;
+  gap: 8px;
+}
+
+.source-folder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #223047;
+  border-radius: 10px;
+  background: #0a111d;
+}
+
+@media (max-width: 600px) {
+  .source-folder {
+    grid-template-columns: 1fr auto;
+  }
+
+  .source-folder button {
+    grid-column: 1 / -1;
+  }
+}

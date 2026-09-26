@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from collections.abc import Callable
@@ -138,6 +139,17 @@ class ProjectService:
         settings.last_project_config_path = None
         self.save_settings(settings)
         self.current = None
+
+    def open_source_folder(self, key: str) -> None:
+        if self.current is None:
+            raise ProjectServiceError("プロジェクトが開かれていません")
+        if not any(dataset.key == key for dataset in self.current.config.datasets):
+            raise ProjectServiceError("データセットが見つかりません")
+        folder_name = dict(self.master_service.folders)["sourceImages"]
+        folder = Path(self.current.root_path) / folder_name / key
+        if not folder.is_dir():
+            raise ProjectServiceError("素材画像フォルダが見つかりません")
+        subprocess.Popen(["explorer.exe", str(folder)])
 
     def reload_current(self) -> ProjectState:
         if self.current is None:

@@ -101,6 +101,12 @@ def close_project(request: Request) -> None:
     return run(lambda: service(request).close())
 
 
+@router.post("/current/datasets/{key}/open-source-folder")
+def open_source_folder(key: str, request: Request) -> dict[str, bool]:
+    run(lambda: service(request).open_source_folder(key))
+    return {"opened": True}
+
+
 @router.put("/current", response_model=ProjectState)
 def save(payload: ProjectConfig, request: Request) -> ProjectState:
     ensure_switch_allowed(request)
