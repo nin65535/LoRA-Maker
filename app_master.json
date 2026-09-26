@@ -11,8 +11,8 @@
     { "key": "trainedLora", "name": "07_LoRA", "role": "学習成果物" }
   ],
   "defaultDatasets": [
-    { "key": "face", "name": "顔", "repeats": 20, "triggerTags": ["__${project}_${dataset}__"], "removedTags": [] },
-    { "key": "outfit", "name": "衣装", "repeats": 10, "triggerTags": ["__${project}_face__", "__${project}_${dataset}__"], "removedTags": [] },
+    { "key": "face", "name": "顔", "repeats": 10, "triggerTags": ["__${project}_${dataset}__"], "removedTags": [] },
+    { "key": "outfit", "name": "衣装", "repeats": 20, "triggerTags": ["__${project}_face__", "__${project}_${dataset}__"], "removedTags": [] },
     { "key": "body", "name": "全身", "repeats": 10, "triggerTags": ["__${project}_face__", "__${project}_${dataset}__"], "removedTags": [] }
   ],
   "fileExtensions": {
