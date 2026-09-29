@@ -7,3 +7,4 @@ workspace/
 frontend/node_modules/
 frontend/dist/
 settings.json.lnk
+AGENTS.local.md

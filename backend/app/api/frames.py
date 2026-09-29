@@ -41,6 +41,12 @@ def open_output(dataset_key: str, video_name: str, request: Request) -> dict[str
     return {"opened": True}
 
 
+@router.post("/{dataset_key}/open-input")
+def open_input(dataset_key: str, request: Request) -> dict[str, bool]:
+    run(lambda: service(request).open_input(dataset_key))
+    return {"opened": True}
+
+
 @router.post("/{dataset_key}/run-unprocessed", response_model=FrameBatchResult)
 def extract_unprocessed(dataset_key: str, request: Request) -> FrameBatchResult:
     jobs, skipped = run(lambda: service(request).enqueue_unprocessed(dataset_key))

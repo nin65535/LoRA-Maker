@@ -136,6 +136,15 @@ class FrameService:
         except OSError as exc:
             raise FrameServiceError(f"抽出結果フォルダを開けません: {exc}") from exc
 
+    def open_input(self, key: str) -> None:
+        source, _, _ = self._videos(key)
+        if not source.is_dir():
+            raise FrameServiceError("動画フォルダが見つかりません")
+        try:
+            subprocess.Popen(["explorer.exe", str(source)])
+        except OSError as exc:
+            raise FrameServiceError(f"動画フォルダを開けません: {exc}") from exc
+
     async def run(self, payload: dict, log: Callable[[str], None]) -> None:
         key, video_name = payload["datasetKey"], payload["videoName"]
         state, _ = self._context(key)

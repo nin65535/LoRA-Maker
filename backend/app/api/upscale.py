@@ -31,6 +31,12 @@ def select(dataset_key: str, capture_folder: str, request: Request) -> Selection
     return SelectionStartResult(target=target, selectionPath=str(selection))
 
 
+@router.post("/{dataset_key}/{capture_folder}/open-input")
+def open_input(dataset_key: str, capture_folder: str, request: Request) -> dict[str, bool]:
+    run(lambda: service(request).open_input(dataset_key, capture_folder))
+    return {"opened": True}
+
+
 @router.post("/{dataset_key}/{capture_folder}/run", response_model=UpscaleRunResult)
 def upscale(dataset_key: str, capture_folder: str, payload: UpscaleRunRequest, request: Request) -> UpscaleRunResult:
     job: Job = run(lambda: service(request).enqueue(dataset_key, capture_folder, payload.scale))

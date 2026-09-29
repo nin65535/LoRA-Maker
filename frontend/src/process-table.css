@@ -1,0 +1,11 @@
+.process-table { overflow-x: auto; }
+.process-table table { width: max-content; min-width: 100%; table-layout: auto; }
+.process-table th, .process-table td { white-space: nowrap; }
+.process-table td { vertical-align: middle; overflow-wrap: normal; }
+.process-table td strong, .process-table td small { display: block; }
+.process-table .process-input { display: flex; align-items: center; gap: 10px; }
+.process-table .process-input button { flex: none; }
+.process-table .process-actions { text-align: center; }
+.process-table .process-actions button { margin: 0 4px 0 0; }
+.process-table .process-result > * + * { margin-top: 6px; }
+.process-table .process-result .status { margin-right: 6px; }

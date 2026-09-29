@@ -282,6 +282,17 @@ class UpscaleService:
             folders=rows,
         )
 
+    def open_input(self, key: str, capture_folder: str) -> None:
+        state, _ = self._context(key)
+        capture_root = (Path(state.root_path) / self.folders["capturedFrames"] / key).resolve()
+        source = (capture_root / capture_folder).resolve()
+        if not source.is_relative_to(capture_root) or not source.is_dir():
+            raise UpscaleServiceError("キャプチャフォルダが見つかりません")
+        try:
+            subprocess.Popen(["explorer.exe", str(source)])
+        except OSError as exc:
+            raise UpscaleServiceError(f"キャプチャフォルダを開けません: {exc}") from exc
+
     def start_selection(self, key: str, capture_folder: str) -> SelectionTarget:
         state, _ = self._context(key)
         if self._bandiview_running():

@@ -1,0 +1,42 @@
+.tag-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.tag-dataset-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid #344258;
+}
+
+.tag-dataset-tabs button {
+  flex: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #8493a7;
+  white-space: nowrap;
+}
+
+.tag-dataset-tabs button[aria-selected="true"] {
+  color: #e7edf7;
+  box-shadow: inset 0 -2px #54c8f5;
+}
+
+.tag-actions {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .tag-toolbar { flex-wrap: wrap; }
+  .tag-dataset-tabs { flex-basis: 100%; }
+  .tag-actions { width: 100%; flex-wrap: wrap; }
+}
